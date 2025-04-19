@@ -12,16 +12,17 @@ class MakemoreModel:
     # Number of neurons in the hidden layer
     w1_neurons = 200
 
-    def __init__(self, w2_scale=0.1, b2_scale=0):
+    def __init__(self, w1_scale=0.1, b1_scale=0.1, w2_scale=0.1, b2_scale=0):
         self.g = torch.Generator().manual_seed(random_seed)
 
         # Matrix containing a "lookup table" from character indices to their embeddings in the vector space.
         self.C = torch.randn((vocab_size, embedding_dims), dtype=torch.float, generator=self.g)
 
         # Hidden tanh layer
-        self.W1 = torch.randn((embedded_context_dims, self.w1_neurons), dtype=torch.float, generator=self.g)
-
-        self.b1 = torch.randn(self.w1_neurons, dtype=torch.float, generator=self.g)
+        # We can scale this to "desaturate" the tanh activations so they're less likely to start out
+        # at extreme ends of the tanh (-1 and 1) where they won't learn quickly.
+        self.W1 = torch.randn((embedded_context_dims, self.w1_neurons), dtype=torch.float, generator=self.g) * w1_scale
+        self.b1 = torch.randn(self.w1_neurons, dtype=torch.float, generator=self.g) * b1_scale
 
         # Final softmax layer, scaled by w2_scale (0.1) to make the initial weights be as similar to
         # each other as possible to start, thus ultimately giving each character an equal
@@ -75,7 +76,7 @@ class MakemoreModel:
 
         return loss
 
-    def train(self, rounds, first_half_lr=0.1, second_half_lr=0.01, minibatch_size=32, X=X_train, Y=Y_train):
+    def train(self, rounds, first_half_lr=0.1, second_half_lr=0.01, minibatch_size=32, X=X_train, Y=Y_train, silent=False):
         num_examples = X.shape[0]
 
         for i in range(rounds):
@@ -90,7 +91,7 @@ class MakemoreModel:
 
             learning_rate = first_half_lr if i < rounds / 2 else second_half_lr
 
-            if i % 1_000 == 0:
+            if i % 1_000 == 0 and not silent:
                 print(f"{i:7d} / {rounds:7d} LR={learning_rate:.2f} minibatch loss: {loss.item():.4f}")
 
             for param in self.params:
