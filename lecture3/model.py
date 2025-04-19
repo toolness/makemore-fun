@@ -12,7 +12,7 @@ class MakemoreModel:
     # Number of neurons in the hidden layer
     w1_neurons = 200
 
-    def __init__(self):
+    def __init__(self, w2_scale=0.1, b2_scale=0):
         self.g = torch.Generator().manual_seed(random_seed)
 
         # Matrix containing a "lookup table" from character indices to their embeddings in the vector space.
@@ -23,14 +23,14 @@ class MakemoreModel:
 
         self.b1 = torch.randn(self.w1_neurons, dtype=torch.float, generator=self.g)
 
-        # Final softmax layer, scaled by 0.1 to make the initial weights be as similar to
+        # Final softmax layer, scaled by w2_scale (0.1) to make the initial weights be as similar to
         # each other as possible to start, thus ultimately giving each character an equal
         # probability, which results in a much better initial loss (described in beginning
         # of lecture 4).
-        self.W2 = torch.randn((self.w1_neurons, vocab_size), dtype=torch.float, generator=self.g) * 0.1
+        self.W2 = torch.randn((self.w1_neurons, vocab_size), dtype=torch.float, generator=self.g) * w2_scale
 
-        # Initialize softmax biases to 0 so every character has equal probability (see above).
-        self.b2 = torch.randn(vocab_size, dtype=torch.float, generator=self.g) * 0
+        # Initialize softmax biases to b2_scale (0) so every character has equal probability (see above).
+        self.b2 = torch.randn(vocab_size, dtype=torch.float, generator=self.g) * b2_scale
 
         self.params = [self.C, self.W1, self.b1, self.W2, self.b2]
 
