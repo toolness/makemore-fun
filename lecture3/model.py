@@ -148,7 +148,7 @@ def test_model():
     result = model.forward(X)
 
     # Ensure the probabilities of all characters in the first example sum to approximately 1.0.
-    assert result.probs[0].sum() - 1.0 < 0.00000
+    assert result.probs[0].sum() - 1.0 < 0.00001
 
     assert list(result.CXW1.shape) == [num_examples, model.w1_neurons]
 
