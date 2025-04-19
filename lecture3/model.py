@@ -59,9 +59,6 @@ class MakemoreModel:
 
         probs = fake_counts / torch.sum(fake_counts, dim=1, keepdim=True)
 
-        # Ensure the probabilities of all characters in the first example sum to approximately 1.0.
-        assert probs[0].sum() - 1.0 < 0.000001
-
         return probs
 
     def calc_loss(self, probs, Y):
@@ -127,3 +124,12 @@ class MakemoreModel:
             context_str = context_str + itos[next_idx]
             num_chars -= 1
         return context_str
+
+
+def test_model():
+    model = MakemoreModel()
+
+    probs = model.forward(X_train)
+
+    # Ensure the probabilities of all characters in the first example sum to approximately 1.0.
+    assert probs[0].sum() - 1.0 < 0.00000
