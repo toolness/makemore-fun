@@ -34,6 +34,8 @@ class MakemoreModel:
 
         self.params = [self.C, self.W1, self.b1, self.W2, self.b2]
 
+        self.training_loss = []
+
         for param in self.params:
             param.requires_grad = True
 
@@ -76,9 +78,6 @@ class MakemoreModel:
     def train(self, rounds, first_half_lr=0.1, second_half_lr=0.01, minibatch_size=32, X=X_train, Y=Y_train):
         num_examples = X.shape[0]
 
-        plot_x = []
-        plot_y = []
-
         for i in range(rounds):
             minibatch_indexes = torch.randint(0, num_examples, (minibatch_size,), generator=self.g)
             minibatch = X[minibatch_indexes]
@@ -87,8 +86,7 @@ class MakemoreModel:
 
             loss = self.calc_loss(probs, Y[minibatch_indexes])
 
-            plot_x.append(i)
-            plot_y.append(loss.item())
+            self.training_loss.append(loss.item())
 
             learning_rate = first_half_lr if i < rounds / 2 else second_half_lr
 
@@ -102,8 +100,6 @@ class MakemoreModel:
 
             for param in self.params:
                 param.data += -learning_rate * param.grad
-
-        return [plot_x, plot_y]
 
     @torch.no_grad
     def calc_loss_for_dataset(self, X, Y):
