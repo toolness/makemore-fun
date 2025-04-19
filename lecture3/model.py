@@ -1,10 +1,12 @@
-import torch
+from dataclasses import dataclass
 
+import torch
 from torch import nn
 
 from .names import vocab_size, stoi, itos
 from .constants import embedding_dims, embedded_context_dims, random_seed, context_size
 from .training_data import X_train, Y_train
+
 
 class MakemoreModel:
     # Number of neurons in the hidden layer
@@ -48,18 +50,19 @@ class MakemoreModel:
 
         CXW1 = torch.tanh(CX @ self.W1 + self.b1)
 
-        assert list(CXW1.shape) == [num_examples, self.w1_neurons]
-
         logits = CXW1 @ self.W2 + self.b2
-
-        assert list(logits.shape) == [num_examples, vocab_size]
 
         # I tried to use torch's softmax here to improve efficiency but it actually made things SLOWER (???).
         fake_counts = logits.exp()
 
         probs = fake_counts / torch.sum(fake_counts, dim=1, keepdim=True)
 
-        return probs
+        return ForwardPassResult(
+            CX=CX,
+            CXW1=CXW1,
+            logits=logits,
+            probs=probs
+        )
 
     def calc_loss(self, probs, Y):
         num_examples = probs.shape[0]
@@ -80,7 +83,7 @@ class MakemoreModel:
             minibatch_indexes = torch.randint(0, num_examples, (minibatch_size,), generator=self.g)
             minibatch = X[minibatch_indexes]
 
-            probs = self.forward(minibatch)
+            probs = self.forward(minibatch).probs
 
             loss = self.calc_loss(probs, Y[minibatch_indexes])
 
@@ -104,7 +107,7 @@ class MakemoreModel:
 
     @torch.no_grad
     def calc_loss_for_dataset(self, X, Y):
-        return self.calc_loss(self.forward(X), Y).item()
+        return self.calc_loss(self.forward(X).probs, Y).item()
 
     def predict(self, context_str='', num_chars=1000, stop_on_terminator=True, greedy=False):
         """
@@ -114,7 +117,7 @@ class MakemoreModel:
         while num_chars > 0:
             context = ([0] * context_size + [stoi[ch] for ch in context_str])[-context_size:]
             X = torch.tensor([context])
-            probs = self.forward(X)
+            probs = self.forward(X).probs
             if greedy:
                 next_idx = probs[0].argmax().item()
             else:
@@ -126,10 +129,30 @@ class MakemoreModel:
         return context_str
 
 
+@dataclass
+class ForwardPassResult:
+    CX: torch.Tensor
+
+    CXW1: torch.Tensor
+
+    logits: torch.Tensor
+
+    probs: torch.Tensor
+
+
 def test_model():
+    from .training_data import X_test
+
     model = MakemoreModel()
 
-    probs = model.forward(X_train)
+    X = X_test
+    num_examples = X_test.shape[0]
+
+    result = model.forward(X)
 
     # Ensure the probabilities of all characters in the first example sum to approximately 1.0.
-    assert probs[0].sum() - 1.0 < 0.00000
+    assert result.probs[0].sum() - 1.0 < 0.00000
+
+    assert list(result.CXW1.shape) == [num_examples, model.w1_neurons]
+
+    assert list(result.logits.shape) == [num_examples, vocab_size]
