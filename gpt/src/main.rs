@@ -1,7 +1,8 @@
 mod tokenizer;
 
-use candle_core::{Device, IndexOp, Tensor};
+use candle_core::{DType, Device, IndexOp, Tensor};
 use anyhow::Result;
+use candle_nn::{Embedding, Module, VarBuilder, VarMap};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tokenizer::Tokenizer;
 
@@ -10,6 +11,21 @@ const BATCH_SIZE: usize = 4;
 
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
+
+struct BigramLanguageModel {
+    token_embedding_table: Embedding
+}
+
+impl BigramLanguageModel {
+    fn new(vb: VarBuilder, vocab_size: usize) -> Result<Self> {
+        let token_embedding_table = candle_nn::embedding(vocab_size, vocab_size, vb)?;
+        Ok(Self { token_embedding_table })
+    }
+
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        Ok(self.token_embedding_table.forward(xs)?)
+    }
+}
 
 fn get_tiny_shakespeare() -> Result<String> {
     // https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
@@ -55,9 +71,18 @@ fn main() -> Result<()> {
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
 
-    let (x, y) = get_batch(train_data, &mut rng)?;
+    let (xs, y) = get_batch(train_data, &mut rng)?;
 
-    println!("x:\n{x}\ny:\n{y}");
+    println!("xs:\n{xs}\ny:\n{y}");
+
+    let varmap = VarMap::new();
+    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
+    let model = BigramLanguageModel::new(vb.clone(), tokenizer.len())?;
+    let logits = model.forward(&xs)?;
+
+    println!("logits shape: {:?}", logits.shape());
+    assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, tokenizer.len()));
+    println!("logits:\n{logits}");
 
     Ok(())
 }
