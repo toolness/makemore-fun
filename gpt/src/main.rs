@@ -65,6 +65,9 @@ impl Tokenizer {
     }
 }
 
+/// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
+/// 
+///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
     let device = Device::Cpu;
 
