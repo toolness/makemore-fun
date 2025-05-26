@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
 pub struct Tokenizer {
-    ctoi: HashMap<char, usize>,
-    itoc: HashMap<usize, char>,
+    ctoi: HashMap<char, u32>,
+    itoc: HashMap<u32, char>,
 }
 
 impl Tokenizer {
@@ -13,11 +13,11 @@ impl Tokenizer {
         all_chars.extend(string.chars());
         let mut all_chars_sorted: Vec<char> = all_chars.iter().copied().collect();
         all_chars_sorted.sort();
-        let mut ctoi: HashMap<char, usize> = HashMap::new();
+        let mut ctoi: HashMap<char, u32> = HashMap::new();
         let mut itoc = HashMap::new();
         for (i, char, ) in all_chars_sorted.iter().enumerate() {
-            ctoi.insert(*char, i);
-            itoc.insert(i, *char);
+            ctoi.insert(*char, i as u32);
+            itoc.insert(i as u32, *char);
         }
         let result = Tokenizer {
             ctoi,
@@ -31,7 +31,7 @@ impl Tokenizer {
         self.ctoi.len()
     }
 
-    pub fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<usize>> {
+    pub fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<u32>> {
         let mut result = Vec::with_capacity(content.as_ref().len());
 
         for char in content.as_ref().chars() {
@@ -44,7 +44,7 @@ impl Tokenizer {
         Ok(result)
     }
 
-    pub fn decode(&self, tokens: &Vec<usize>) -> Result<String> {
+    pub fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result = String::with_capacity(tokens.len());
 
         for token in tokens.iter() {

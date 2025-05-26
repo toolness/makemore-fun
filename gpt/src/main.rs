@@ -1,6 +1,6 @@
 mod tokenizer;
 
-use candle_core::{Device, Tensor};
+use candle_core::{Device, IndexOp, Tensor};
 use anyhow::Result;
 use tokenizer::Tokenizer;
 
@@ -27,6 +27,16 @@ fn main() -> Result<()> {
     println!("Initialized tokenizer with {} tokens.", tokenizer.len());
     println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
     println!("decoded 'hii there': {:?}", tokenizer.decode(&tokenizer.encode("hii there")?)?);
+
+    let data = Tensor::new(tokenizer.encode(&tiny_shakespeare)?, &device)?;
+    let data_len = data.shape().dim(0)?;
+
+    println!("Data is {} tokens.", data_len);
+    let train_split_index = (0.9 * (data_len as f64)) as usize;
+    let train_data = data.i(..train_split_index)?;
+    let val_data = data.i(train_split_index..)?;
+    println!("Training data is {} tokens.", train_data.shape().dim(0)?);
+    println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
 
     Ok(())
 }
