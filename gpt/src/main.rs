@@ -3,7 +3,9 @@ mod tokenizer;
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, DType, Device, IndexOp, Tensor};
-use candle_nn::{Embedding, Module, VarBuilder, VarMap, loss::cross_entropy, ops::softmax};
+use candle_nn::{
+    Embedding, Module, Optimizer, SGD, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
+};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
@@ -12,6 +14,8 @@ const BATCH_SIZE: usize = 4;
 
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
+
+const LEARNING_RATE: f64 = 0.1;
 
 struct BigramLanguageModel {
     token_embedding_table: Embedding,
@@ -85,28 +89,36 @@ fn main() -> Result<()> {
     let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
-
+    let mut sgd = SGD::new(varmap.all_vars(), LEARNING_RATE)?;
     println!("varmap vars: {:?}", varmap.all_vars());
 
-    let logits = model.forward(&xs)?;
+    for i in 0..=10_000 {
+        let logits = model.forward(&xs)?;
 
-    println!("logits shape: {:?}", logits.shape());
-    assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, vocab_size));
+        assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, vocab_size));
 
-    if cfg!(debug_assertions) {
-        let sm = softmax(&logits, D::Minus1)?;
-        assert_relative_eq!(sm.get(0)?.get(0)?.sum(0)?.to_scalar::<f32>()?, 1.0);
+        if cfg!(debug_assertions) {
+            let sm = softmax(&logits, D::Minus1)?;
+            assert_relative_eq!(
+                sm.get(0)?.get(0)?.sum(0)?.to_scalar::<f32>()?,
+                1.0,
+                epsilon = 0.0001
+            );
+        }
+
+        let flat_logits = logits.reshape((BATCH_SIZE * BLOCK_SIZE, vocab_size))?;
+        let flat_ys = ys.reshape(BATCH_SIZE * BLOCK_SIZE)?;
+
+        if cfg!(debug_assertions) {
+            assert_equal_tensors(logits.get(0)?.get(0)?, flat_logits.get(0)?)?;
+        }
+        let loss = cross_entropy(&flat_logits, &flat_ys)?;
+        sgd.backward_step(&loss)?;
+
+        if i % 100 == 0 {
+            println!("loss at epoch {i}: {}", loss.to_scalar::<f32>()?);
+        }
     }
-
-    let flat_logits = logits.reshape((BATCH_SIZE * BLOCK_SIZE, vocab_size))?;
-    let flat_ys = ys.reshape(BATCH_SIZE * BLOCK_SIZE)?;
-
-    if cfg!(debug_assertions) {
-        assert_equal_tensors(logits.get(0)?.get(0)?, flat_logits.get(0)?)?;
-    }
-    let loss = cross_entropy(&flat_logits, &flat_ys)?;
-
-    println!("loss: {}", loss.to_scalar::<f32>()?);
 
     Ok(())
 }
