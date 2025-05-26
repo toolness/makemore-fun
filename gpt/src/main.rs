@@ -42,6 +42,9 @@ fn main() -> Result<()> {
         let mut y = Vec::with_capacity(batch_size);
         let data_len = data.shape().dim(0)?;
         for _ in 0..batch_size {
+            // Ideally we'd use candle for these random numbers, but as far as I can tell,
+            // it can only generate random floats. I guess we could round/cast them to
+            // integers but for now I'm just going to use the rand crate instead.
             let idx: usize = rng.random_range(0..(data_len - block_size));
             x.push(data.i(idx..(block_size + idx))?);
             y.push(data.i((idx + 1)..(block_size + idx + 1))?);
