@@ -5,6 +5,12 @@ use anyhow::Result;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tokenizer::Tokenizer;
 
+/// Number of examples in each batch.
+const BATCH_SIZE: usize = 4;
+
+/// Context size, in tokens.
+const BLOCK_SIZE: usize = 8;
+
 fn get_tiny_shakespeare() -> Result<String> {
     // https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
     let content = std::fs::read_to_string("tiny-shakespeare.txt")?;
@@ -34,20 +40,17 @@ fn main() -> Result<()> {
     println!("Training data is {} tokens.", train_data.shape().dim(0)?);
     println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
 
-    let batch_size = 4;
-    let block_size = 8;
-
     let get_batch = |data: Tensor, rng: &mut StdRng| -> Result<(Tensor, Tensor)> {
-        let mut x = Vec::with_capacity(batch_size);
-        let mut y = Vec::with_capacity(batch_size);
+        let mut x = Vec::with_capacity(BATCH_SIZE);
+        let mut y = Vec::with_capacity(BATCH_SIZE);
         let data_len = data.shape().dim(0)?;
-        for _ in 0..batch_size {
+        for _ in 0..BATCH_SIZE {
             // Ideally we'd use candle for these random numbers, but as far as I can tell,
             // it can only generate random floats. I guess we could round/cast them to
             // integers but for now I'm just going to use the rand crate instead.
-            let idx: usize = rng.random_range(0..(data_len - block_size));
-            x.push(data.i(idx..(block_size + idx))?);
-            y.push(data.i((idx + 1)..(block_size + idx + 1))?);
+            let idx: usize = rng.random_range(0..(data_len - BLOCK_SIZE));
+            x.push(data.i(idx..(BLOCK_SIZE + idx))?);
+            y.push(data.i((idx + 1)..(BLOCK_SIZE + idx + 1))?);
         }
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
