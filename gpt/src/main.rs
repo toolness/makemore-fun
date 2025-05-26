@@ -1,10 +1,10 @@
 mod tokenizer;
 
-use approx::assert_relative_eq;
-use candle_core::{DType, Device, IndexOp, Tensor, D};
 use anyhow::Result;
-use candle_nn::{loss::cross_entropy, ops::softmax, Embedding, Module, VarBuilder, VarMap};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use approx::assert_relative_eq;
+use candle_core::{D, DType, Device, IndexOp, Tensor};
+use candle_nn::{Embedding, Module, VarBuilder, VarMap, loss::cross_entropy, ops::softmax};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
 /// Number of examples in each batch.
@@ -14,13 +14,15 @@ const BATCH_SIZE: usize = 4;
 const BLOCK_SIZE: usize = 8;
 
 struct BigramLanguageModel {
-    token_embedding_table: Embedding
+    token_embedding_table: Embedding,
 }
 
 impl BigramLanguageModel {
     fn new(vb: VarBuilder, vocab_size: usize) -> Result<Self> {
         let token_embedding_table = candle_nn::embedding(vocab_size, vocab_size, vb)?;
-        Ok(Self { token_embedding_table })
+        Ok(Self {
+            token_embedding_table,
+        })
     }
 
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
@@ -35,7 +37,7 @@ fn get_tiny_shakespeare() -> Result<String> {
 }
 
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
-/// 
+///
 ///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(123);
@@ -46,7 +48,10 @@ fn main() -> Result<()> {
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
     println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
-    println!("decoded 'hii there': {:?}", tokenizer.decode(&tokenizer.encode("hii there")?)?);
+    println!(
+        "decoded 'hii there': {:?}",
+        tokenizer.decode(&tokenizer.encode("hii there")?)?
+    );
 
     let data = Tensor::new(tokenizer.encode(&tiny_shakespeare)?, &device)?;
     let data_len = data.shape().dim(0)?;
