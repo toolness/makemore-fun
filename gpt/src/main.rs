@@ -1,8 +1,9 @@
 mod tokenizer;
 
-use candle_core::{DType, Device, IndexOp, Tensor};
+use approx::assert_relative_eq;
+use candle_core::{DType, Device, IndexOp, Tensor, D};
 use anyhow::Result;
-use candle_nn::{Embedding, Module, VarBuilder, VarMap};
+use candle_nn::{loss::cross_entropy, ops::softmax, Embedding, Module, VarBuilder, VarMap};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tokenizer::Tokenizer;
 
@@ -42,7 +43,8 @@ fn main() -> Result<()> {
 
     let tiny_shakespeare = get_tiny_shakespeare()?;
     let tokenizer = Tokenizer::from_string(&tiny_shakespeare)?;
-    println!("Initialized tokenizer with {} tokens.", tokenizer.len());
+    let vocab_size = tokenizer.len();
+    println!("Initialized tokenizer with {} tokens.", vocab_size);
     println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
     println!("decoded 'hii there': {:?}", tokenizer.decode(&tokenizer.encode("hii there")?)?);
 
@@ -71,18 +73,44 @@ fn main() -> Result<()> {
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
 
-    let (xs, y) = get_batch(train_data, &mut rng)?;
+    let (xs, ys) = get_batch(train_data, &mut rng)?;
 
-    println!("xs:\n{xs}\ny:\n{y}");
+    println!("xs:\n{xs}\nys:\n{ys}");
 
     let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BigramLanguageModel::new(vb.clone(), tokenizer.len())?;
+    let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
+
+    println!("varmap vars: {:?}", varmap.all_vars());
+
     let logits = model.forward(&xs)?;
 
     println!("logits shape: {:?}", logits.shape());
-    assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, tokenizer.len()));
-    println!("logits:\n{logits}");
+    assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, vocab_size));
 
+    if cfg!(debug_assertions) {
+        let sm = softmax(&logits, D::Minus1)?;
+        assert_relative_eq!(sm.get(0)?.get(0)?.sum(0)?.to_scalar::<f32>()?, 1.0);
+    }
+
+    let flat_logits = logits.reshape((BATCH_SIZE * BLOCK_SIZE, vocab_size))?;
+    let flat_ys = ys.reshape(BATCH_SIZE * BLOCK_SIZE)?;
+
+    if cfg!(debug_assertions) {
+        assert_equal_tensors(logits.get(0)?.get(0)?, flat_logits.get(0)?)?;
+    }
+    let loss = cross_entropy(&flat_logits, &flat_ys)?;
+
+    println!("loss: {}", loss.to_scalar::<f32>()?);
+
+    Ok(())
+}
+
+fn assert_equal_tensors(a: Tensor, b: Tensor) -> Result<()> {
+    // WHY IS THIS SO HARD????????????????
+    let eq = a.eq(&b)?.flatten_all()?.to_vec1::<u8>()?;
+    for item in eq {
+        assert_eq!(item, 1);
+    }
     Ok(())
 }
