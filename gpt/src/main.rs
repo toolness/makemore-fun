@@ -16,12 +16,6 @@ fn get_tiny_shakespeare() -> Result<String> {
 fn main() -> Result<()> {
     let device = Device::Cpu;
 
-    let a = Tensor::randn(0f32, 1., (2, 3), &device)?;
-    let b = Tensor::randn(0f32, 1., (3, 4), &device)?;
-
-    let c = a.matmul(&b)?;
-    println!("{c}");
-
     let tiny_shakespeare = get_tiny_shakespeare()?;
     let tokenizer = Tokenizer::from_string(&tiny_shakespeare)?;
     println!("Initialized tokenizer with {} tokens.", tokenizer.len());
