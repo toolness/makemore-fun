@@ -15,7 +15,7 @@ const BATCH_SIZE: usize = 4;
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
 
-const LEARNING_RATE: f64 = 0.1;
+const LEARNING_RATE: f64 = 0.01;
 
 struct BigramLanguageModel {
     token_embedding_table: Embedding,
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
     println!("Training data is {} tokens.", train_data.shape().dim(0)?);
     println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
 
-    let get_batch = |data: Tensor, rng: &mut StdRng| -> Result<(Tensor, Tensor)> {
+    let get_batch = |data: &Tensor, rng: &mut StdRng| -> Result<(Tensor, Tensor)> {
         let mut x = Vec::with_capacity(BATCH_SIZE);
         let mut y = Vec::with_capacity(BATCH_SIZE);
         let data_len = data.shape().dim(0)?;
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
 
-    let (xs, ys) = get_batch(train_data, &mut rng)?;
+    let (xs, ys) = get_batch(&train_data, &mut rng)?;
 
     println!("xs:\n{xs}\nys:\n{ys}");
 
@@ -93,6 +93,7 @@ fn main() -> Result<()> {
     println!("varmap vars: {:?}", varmap.all_vars());
 
     for i in 0..=10_000 {
+        let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
 
         assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, vocab_size));
