@@ -7,7 +7,7 @@ use candle_nn::{
     Embedding, Module, Optimizer, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
 };
 use candle_optimisers::adam::{Adam, ParamsAdam};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{distr::{weighted::WeightedIndex, Distribution}, rngs::StdRng, Rng, SeedableRng};
 use tokenizer::Tokenizer;
 
 /// Number of examples in each batch.
@@ -136,7 +136,7 @@ fn main() -> Result<()> {
         let block = Tensor::from_slice(&data, (1,), &device)?;
         let logits = model.forward(&block)?;
         let sm = softmax(&logits, 1)?;
-        token = sm.argmax(D::Minus1)?.get(0)?.to_scalar()?;
+        token = multinomial(&sm, &mut rng)?;
         result.push(token);
     }
 
@@ -145,6 +145,31 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Uh, candle doesn't seem to have multinomial sampling built-in, so
+/// we'll just implement something janky here.
+/// 
+/// We could consider using https://github.com/EricLBuehler/candle-sampling
+/// instead.
+fn multinomial(tensor: &Tensor, rng: &mut StdRng) -> Result<u32> {
+    let vec: Vec<f32> = tensor.get(0)?.to_vec1()?;
+    let mut choices: Vec<u32> = Vec::with_capacity(vec.len());
+    let mut weights: Vec<u32> = Vec::with_capacity(vec.len());
+
+    for (i, prob) in vec.iter().enumerate() {
+        let weight = (prob * 100.0) as u32;
+        if weight > 0 {
+            choices.push(i as u32);
+            weights.push(weight);
+        }
+    }
+
+    let dist = WeightedIndex::new(&weights)?;
+
+    Ok(choices[dist.sample(rng)])
+}
+
+/// Uh, candle doesn't have an easy way of comparing tensors for
+/// equality so we'll do this.
 fn assert_equal_tensors(a: Tensor, b: Tensor) -> Result<()> {
     // WHY IS THIS SO HARD????????????????
     let eq = a.eq(&b)?.flatten_all()?.to_vec1::<u8>()?;
