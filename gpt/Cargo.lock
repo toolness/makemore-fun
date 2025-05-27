@@ -141,6 +141,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "candle-optimisers"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e83284c45ed1264237f61b3a079b4be53e55e0920625f90dd47a44ce1d73c1f"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "log",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -514,6 +525,7 @@ dependencies = [
  "approx",
  "candle-core",
  "candle-nn",
+ "candle-optimisers",
  "rand",
 ]
 
@@ -586,6 +598,12 @@ name = "libm"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
+
+[[package]]
+name = "log"
+version = "0.4.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "memchr"

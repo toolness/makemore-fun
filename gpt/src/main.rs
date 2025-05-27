@@ -4,8 +4,9 @@ use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, DType, Device, IndexOp, Tensor};
 use candle_nn::{
-    Embedding, Module, Optimizer, SGD, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
+    Embedding, Module, Optimizer, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
 };
+use candle_optimisers::adam::{Adam, ParamsAdam};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
@@ -15,7 +16,9 @@ const BATCH_SIZE: usize = 32;
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
 
-const LEARNING_RATE: f64 = 0.01;
+const LEARNING_RATE: f64 = 0.001;
+
+const EPOCHS: usize = 10_000;
 
 struct BigramLanguageModel {
     token_embedding_table: Embedding,
@@ -89,10 +92,14 @@ fn main() -> Result<()> {
     let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
-    let mut sgd = SGD::new(varmap.all_vars(), LEARNING_RATE)?;
+    let params = ParamsAdam {
+        lr: LEARNING_RATE,
+        ..Default::default()
+    };
+    let mut sgd = Adam::new(varmap.all_vars(), params)?;
     println!("varmap vars: {:?}", varmap.all_vars());
 
-    for i in 0..=10_000 {
+    for i in 0..=EPOCHS {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
 
@@ -133,7 +140,7 @@ fn main() -> Result<()> {
         result.push(token);
     }
 
-    println!("{}", tokenizer.decode(&result)?);
+    println!("{:?}", tokenizer.decode(&result)?);
 
     Ok(())
 }
