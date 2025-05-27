@@ -120,6 +120,20 @@ fn main() -> Result<()> {
         }
     }
 
+    let num_chars: usize = 100;
+    let mut token: u32 = 0;
+    let mut result = Vec::with_capacity(num_chars);
+    for _ in 0..num_chars {
+        let data: [u32; 1] = [token];
+        let block = Tensor::from_slice(&data, (1,), &device)?;
+        let logits = model.forward(&block)?;
+        let sm = softmax(&logits, 1)?;
+        token = sm.argmax(D::Minus1)?.get(0)?.to_scalar()?;
+        result.push(token);
+    }
+
+    println!("{}", tokenizer.decode(&result)?);
+
     Ok(())
 }
 
