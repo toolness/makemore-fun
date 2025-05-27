@@ -10,7 +10,7 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
 /// Number of examples in each batch.
-const BATCH_SIZE: usize = 4;
+const BATCH_SIZE: usize = 32;
 
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
