@@ -62,6 +62,20 @@ impl BigramLanguageModel {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         Ok(self.token_embedding_table.forward(xs)?)
     }
+
+    fn generate(&self, num_chars: usize, rng: &mut StdRng, device: &Device) -> Result<Vec<u32>> {
+        let mut token: u32 = 0;
+        let mut result = Vec::with_capacity(num_chars);
+        for _ in 0..num_chars {
+            let data: [u32; 1] = [token];
+            let block = Tensor::from_slice(&data, (1,), device)?;
+            let logits = self.forward(&block)?;
+            let sm = softmax(&logits, 1)?;
+            token = multinomial(&sm, rng)?;
+            result.push(token);
+        }
+        Ok(result)
+    }
 }
 
 fn get_tiny_shakespeare() -> Result<String> {
@@ -173,18 +187,7 @@ fn main() -> Result<()> {
         varmap.save(save)?;
     }
 
-    let num_chars: usize = 100;
-    let mut token: u32 = 0;
-    let mut result = Vec::with_capacity(num_chars);
-    for _ in 0..num_chars {
-        let data: [u32; 1] = [token];
-        let block = Tensor::from_slice(&data, (1,), &device)?;
-        let logits = model.forward(&block)?;
-        let sm = softmax(&logits, 1)?;
-        token = multinomial(&sm, &mut rng)?;
-        result.push(token);
-    }
-
+    let result = model.generate(100, &mut rng, &device)?;
     println!("{:?}", tokenizer.decode(&result)?);
 
     Ok(())
