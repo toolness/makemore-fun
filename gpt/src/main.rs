@@ -1,5 +1,6 @@
 mod tokenizer;
 
+use clap::Parser;
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, DType, Device, IndexOp, Tensor};
@@ -18,7 +19,11 @@ const BLOCK_SIZE: usize = 8;
 
 const LEARNING_RATE: f64 = 0.001;
 
-const EPOCHS: usize = 10_000;
+#[derive(Parser)]
+pub struct Args {
+    #[arg(long, default_value_t = 10_000)]
+    pub epochs: usize,
+}
 
 struct BigramLanguageModel {
     token_embedding_table: Embedding,
@@ -47,6 +52,7 @@ fn get_tiny_shakespeare() -> Result<String> {
 ///
 ///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
+    let args = Args::parse();
     let mut rng = StdRng::seed_from_u64(123);
     let device = Device::Cpu;
 
@@ -99,7 +105,7 @@ fn main() -> Result<()> {
     let mut sgd = Adam::new(varmap.all_vars(), params)?;
     println!("varmap vars: {:?}", varmap.all_vars());
 
-    for i in 0..=EPOCHS {
+    for i in 0..=args.epochs {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
 
