@@ -1,5 +1,7 @@
 mod tokenizer;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, DType, Device, IndexOp, Tensor};
@@ -25,6 +27,10 @@ const LEARNING_RATE: f64 = 0.001;
 
 #[derive(Parser)]
 pub struct Args {
+    /// Random number seed.
+    #[arg(long)]
+    pub seed: Option<u64>,
+
     /// Number of epochs to train the model.
     #[arg(long, default_value_t = 10_000)]
     pub epochs: usize,
@@ -66,7 +72,9 @@ fn get_tiny_shakespeare() -> Result<String> {
 ///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
     let args = Args::parse();
-    let mut rng = StdRng::seed_from_u64(123);
+    let now = SystemTime::now();
+    let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
+    let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(timestamp));
     let device = Device::Cpu;
 
     let tiny_shakespeare = get_tiny_shakespeare()?;
