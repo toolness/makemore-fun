@@ -107,9 +107,8 @@ fn main() -> Result<()> {
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
 
-    let (xs, ys) = get_batch(&train_data, &mut rng)?;
-
-    println!("xs:\n{xs}\nys:\n{ys}");
+    // let (xs, ys) = get_batch(&train_data, &mut rng)?;
+    // println!("xs:\n{xs}\nys:\n{ys}");
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
