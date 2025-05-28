@@ -1,6 +1,5 @@
 mod tokenizer;
 
-use clap::Parser;
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, DType, Device, IndexOp, Tensor};
@@ -8,7 +7,12 @@ use candle_nn::{
     Embedding, Module, Optimizer, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
 };
 use candle_optimisers::adam::{Adam, ParamsAdam};
-use rand::{distr::{weighted::WeightedIndex, Distribution}, rngs::StdRng, Rng, SeedableRng};
+use clap::Parser;
+use rand::{
+    Rng, SeedableRng,
+    distr::{Distribution, weighted::WeightedIndex},
+    rngs::StdRng,
+};
 use tokenizer::Tokenizer;
 
 /// Number of examples in each batch.
@@ -69,11 +73,14 @@ fn main() -> Result<()> {
     let tokenizer = Tokenizer::from_string(&tiny_shakespeare)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
-    println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
-    println!(
-        "decoded 'hii there': {:?}",
-        tokenizer.decode(&tokenizer.encode("hii there")?)?
-    );
+
+    if cfg!(debug_assertions) {
+        println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
+        println!(
+            "decoded 'hii there': {:?}",
+            tokenizer.decode(&tokenizer.encode("hii there")?)?
+        );
+    }
 
     let data = Tensor::new(tokenizer.encode(&tiny_shakespeare)?, &device)?;
     let data_len = data.shape().dim(0)?;
@@ -173,7 +180,7 @@ fn main() -> Result<()> {
 
 /// Uh, candle doesn't seem to have multinomial sampling built-in, so
 /// we'll just implement something janky here.
-/// 
+///
 /// We could consider using https://github.com/EricLBuehler/candle-sampling
 /// instead.
 fn multinomial(tensor: &Tensor, rng: &mut StdRng) -> Result<u32> {
