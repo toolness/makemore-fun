@@ -1,6 +1,6 @@
 mod tokenizer;
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{path::{Path, PathBuf}, time::{SystemTime, UNIX_EPOCH}};
 
 use anyhow::Result;
 use approx::assert_relative_eq;
@@ -123,6 +123,7 @@ fn main() -> Result<()> {
     let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
 
     if let Some(load) = &args.load {
+        let load = normalize_safetensors_filename(load);
         println!("Loading weights from {load}.");
         varmap.load(load)?;
     }
@@ -164,6 +165,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(save) = &args.save {
+        let save = normalize_safetensors_filename(save);
         println!("Saving weights to {save}.");
         varmap.save(save)?;
     }
@@ -217,4 +219,19 @@ fn assert_equal_tensors(a: Tensor, b: Tensor) -> Result<()> {
         assert_eq!(item, 1);
     }
     Ok(())
+}
+
+fn normalize_safetensors_filename(filename: &String) -> String {
+    add_extension_if_missing(filename, "safetensors")
+}
+
+fn add_extension_if_missing(filename: &String, extension: &str) -> String {
+    let path = Path::new(filename);
+    if path.extension().is_none() {
+        let mut new_path = PathBuf::from(path);
+        new_path.set_extension(extension);
+        new_path.to_string_lossy().into_owned()
+    } else {
+        filename.to_string()
+    }
 }
