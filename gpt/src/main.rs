@@ -21,8 +21,17 @@ const LEARNING_RATE: f64 = 0.001;
 
 #[derive(Parser)]
 pub struct Args {
+    /// Number of epochs to train the model.
     #[arg(long, default_value_t = 10_000)]
     pub epochs: usize,
+
+    /// The file to save the trained weights to, in safetensors format.
+    #[arg(long)]
+    pub save: Option<String>,
+
+    /// The file to load the trained weights from, in safetensors format.
+    #[arg(long)]
+    pub load: Option<String>,
 }
 
 struct BigramLanguageModel {
@@ -95,9 +104,15 @@ fn main() -> Result<()> {
 
     println!("xs:\n{xs}\nys:\n{ys}");
 
-    let varmap = VarMap::new();
+    let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
+
+    if let Some(load) = &args.load {
+        println!("Loading weights from {load}.");
+        varmap.load(load)?;
+    }
+
     let params = ParamsAdam {
         lr: LEARNING_RATE,
         ..Default::default()
@@ -132,6 +147,11 @@ fn main() -> Result<()> {
         if i % 100 == 0 {
             println!("loss at epoch {i}: {}", loss.to_scalar::<f32>()?);
         }
+    }
+
+    if let Some(save) = &args.save {
+        println!("Saving weights to {save}.");
+        varmap.save(save)?;
     }
 
     let num_chars: usize = 100;
