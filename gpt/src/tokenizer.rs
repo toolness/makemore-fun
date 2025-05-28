@@ -15,14 +15,11 @@ impl Tokenizer {
         all_chars_sorted.sort();
         let mut ctoi: HashMap<char, u32> = HashMap::new();
         let mut itoc = HashMap::new();
-        for (i, char, ) in all_chars_sorted.iter().enumerate() {
+        for (i, char) in all_chars_sorted.iter().enumerate() {
             ctoi.insert(*char, i as u32);
             itoc.insert(i as u32, *char);
         }
-        let result = Tokenizer {
-            ctoi,
-            itoc,
-        };
+        let result = Tokenizer { ctoi, itoc };
 
         Ok(result)
     }
