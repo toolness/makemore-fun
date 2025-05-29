@@ -34,6 +34,9 @@ const EVAL_INTERVAL: usize = 300;
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
 
+/// Number of characters to generate.
+const GENERATE_NUM_CHARS: usize = 500;
+
 #[derive(Parser)]
 pub struct Args {
     /// Random number seed.
@@ -214,8 +217,8 @@ fn main() -> Result<()> {
         varmap.save(save)?;
     }
 
-    let result = model.generate(100, &mut rng, &device)?;
-    println!("{:?}", tokenizer.decode(&result)?);
+    let result = model.generate(GENERATE_NUM_CHARS, &mut rng, &device)?;
+    println!("{}", tokenizer.decode(&result)?);
 
     Ok(())
 }
