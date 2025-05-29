@@ -64,14 +64,16 @@ impl BigramLanguageModel {
     }
 
     fn generate(&self, num_chars: usize, rng: &mut StdRng, device: &Device) -> Result<Vec<u32>> {
-        let mut token: u32 = 0;
         let mut result = Vec::with_capacity(num_chars);
+        result.push(0);
         for _ in 0..num_chars {
-            let data: [u32; 1] = [token];
-            let block = Tensor::from_slice(&data, (1,), device)?;
+            let block_slice = &result[result.len().saturating_sub(BLOCK_SIZE)..];
+            let block = Tensor::from_slice(block_slice, (1, block_slice.len()), device)?;
             let logits = self.forward(&block)?;
+            // Take just the logits for the final time step.
+            let logits = logits.i((.., block_slice.len() - 1, ..))?;
             let sm = softmax(&logits, 1)?;
-            token = multinomial(&sm, rng)?;
+            let token = multinomial(&sm, rng)?;
             result.push(token);
         }
         Ok(result)
