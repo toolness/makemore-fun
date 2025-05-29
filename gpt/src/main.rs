@@ -1,4 +1,7 @@
+mod bigram_language_model;
+mod language_model;
 mod tokenizer;
+mod util;
 
 use std::{
     path::{Path, PathBuf},
@@ -6,18 +9,13 @@ use std::{
 };
 
 use anyhow::Result;
-use approx::assert_relative_eq;
-use candle_core::{D, DType, Device, IndexOp, Tensor};
-use candle_nn::{
-    Embedding, Module, Optimizer, VarBuilder, VarMap, loss::cross_entropy, ops::softmax,
-};
+use bigram_language_model::BigramLanguageModel;
+use candle_core::{DType, Device, IndexOp, Tensor};
+use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use candle_optimisers::adam::{Adam, ParamsAdam};
 use clap::Parser;
-use rand::{
-    Rng, SeedableRng,
-    distr::{Distribution, weighted::WeightedIndex},
-    rngs::StdRng,
-};
+use language_model::LanguageModel;
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
 /// Number of examples in each batch.
@@ -54,63 +52,6 @@ pub struct Args {
     /// The file to load the trained weights from, in safetensors format.
     #[arg(long)]
     pub load: Option<String>,
-}
-
-struct BigramLanguageModel {
-    vocab_size: usize,
-    token_embedding_table: Embedding,
-}
-
-impl BigramLanguageModel {
-    fn new(vb: VarBuilder, vocab_size: usize) -> Result<Self> {
-        let token_embedding_table = candle_nn::embedding(vocab_size, vocab_size, vb)?;
-        Ok(Self {
-            vocab_size,
-            token_embedding_table,
-        })
-    }
-
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        Ok(self.token_embedding_table.forward(xs)?)
-    }
-
-    fn loss(&self, logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
-        assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, self.vocab_size));
-
-        if cfg!(debug_assertions) {
-            let sm = softmax(&logits, D::Minus1)?;
-            assert_relative_eq!(
-                sm.get(0)?.get(0)?.sum(0)?.to_scalar::<f32>()?,
-                1.0,
-                epsilon = 0.0001
-            );
-        }
-
-        let flat_logits = logits.reshape((BATCH_SIZE * BLOCK_SIZE, self.vocab_size))?;
-        let flat_ys = ys.reshape(BATCH_SIZE * BLOCK_SIZE)?;
-
-        if cfg!(debug_assertions) {
-            assert_equal_tensors(logits.get(0)?.get(0)?, flat_logits.get(0)?)?;
-        }
-        let loss = cross_entropy(&flat_logits, &flat_ys)?;
-        Ok(loss)
-    }
-
-    fn generate(&self, num_chars: usize, rng: &mut StdRng, device: &Device) -> Result<Vec<u32>> {
-        let mut result = Vec::with_capacity(num_chars);
-        result.push(0);
-        for _ in 0..num_chars {
-            let block_slice = &result[result.len().saturating_sub(BLOCK_SIZE)..];
-            let block = Tensor::from_slice(block_slice, (1, block_slice.len()), device)?;
-            let logits = self.forward(&block)?;
-            // Take just the logits for the final time step.
-            let logits = logits.i((.., block_slice.len() - 1, ..))?;
-            let sm = softmax(&logits, 1)?;
-            let token = multinomial(&sm, rng)?;
-            result.push(token);
-        }
-        Ok(result)
-    }
 }
 
 fn get_tiny_shakespeare() -> Result<String> {
@@ -222,40 +163,6 @@ fn main() -> Result<()> {
     let result = model.generate(GENERATE_NUM_CHARS, &mut rng, &device)?;
     println!("{}", tokenizer.decode(&result)?);
 
-    Ok(())
-}
-
-/// Uh, candle doesn't seem to have multinomial sampling built-in, so
-/// we'll just implement something janky here.
-///
-/// We could consider using https://github.com/EricLBuehler/candle-sampling
-/// instead.
-fn multinomial(tensor: &Tensor, rng: &mut StdRng) -> Result<u32> {
-    let vec: Vec<f32> = tensor.get(0)?.to_vec1()?;
-    let mut choices: Vec<u32> = Vec::with_capacity(vec.len());
-    let mut weights: Vec<u32> = Vec::with_capacity(vec.len());
-
-    for (i, prob) in vec.iter().enumerate() {
-        let weight = (prob * 100.0) as u32;
-        if weight > 0 {
-            choices.push(i as u32);
-            weights.push(weight);
-        }
-    }
-
-    let dist = WeightedIndex::new(&weights)?;
-
-    Ok(choices[dist.sample(rng)])
-}
-
-/// Uh, candle doesn't have an easy way of comparing tensors for
-/// equality so we'll do this.
-fn assert_equal_tensors(a: Tensor, b: Tensor) -> Result<()> {
-    // WHY IS THIS SO HARD????????????????
-    let eq = a.eq(&b)?.flatten_all()?.to_vec1::<u8>()?;
-    for item in eq {
-        assert_eq!(item, 1);
-    }
     Ok(())
 }
 
