@@ -26,7 +26,13 @@ const BATCH_SIZE: usize = 32;
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
 
-const LEARNING_RATE: f64 = 0.001;
+const LEARNING_RATE: f64 = 1e-2;
+
+/// After how many epochs do we evaluate the model again?
+const EVAL_INTERVAL: usize = 300;
+
+/// How many batches to compute loss over.
+const EVAL_ITERS: usize = 200;
 
 #[derive(Parser)]
 pub struct Args {
@@ -35,7 +41,7 @@ pub struct Args {
     pub seed: Option<u64>,
 
     /// Number of epochs to train the model.
-    #[arg(long, default_value_t = 10_000)]
+    #[arg(long, default_value_t = 3_000)]
     pub epochs: usize,
 
     /// The file to save the trained weights to, in safetensors format.
@@ -178,14 +184,27 @@ fn main() -> Result<()> {
     let mut sgd = Adam::new(varmap.all_vars(), params)?;
     println!("varmap vars: {:?}", varmap.all_vars());
 
+    let estimate_loss = |data: &Tensor, rng: &mut StdRng| -> Result<f32> {
+        let mut losses = Vec::with_capacity(EVAL_ITERS);
+        for _ in 0..EVAL_ITERS {
+            let (xs, ys) = get_batch(&data, rng)?;
+            let logits = model.forward(&xs)?;
+            let loss = model.loss(&logits, &ys)?;
+            losses.push(loss.to_scalar()?);
+        }
+        Ok(losses.iter().sum::<f32>() / losses.len() as f32)
+    };
+
     for i in 0..=args.epochs {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = model.loss(&logits, &ys)?;
         sgd.backward_step(&loss)?;
 
-        if i % 100 == 0 {
-            println!("loss at epoch {i}: {}", loss.to_scalar::<f32>()?);
+        if i % EVAL_INTERVAL == 0 {
+            let train_loss = estimate_loss(&train_data, &mut rng)?;
+            let val_loss = estimate_loss(&val_data, &mut rng)?;
+            println!("epoch {i}: train loss {train_loss:.4}, val loss {val_loss:.4}",);
         }
     }
 
