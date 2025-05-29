@@ -126,7 +126,8 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let now = SystemTime::now();
     let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
-    let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(timestamp));
+    let seed = args.seed.unwrap_or(timestamp);
+    let mut rng = StdRng::seed_from_u64(seed);
     let device = Device::Cpu;
 
     let tiny_shakespeare = get_tiny_shakespeare()?;
@@ -217,6 +218,7 @@ fn main() -> Result<()> {
         varmap.save(save)?;
     }
 
+    let mut rng = StdRng::seed_from_u64(seed);
     let result = model.generate(GENERATE_NUM_CHARS, &mut rng, &device)?;
     println!("{}", tokenizer.decode(&result)?);
 
