@@ -11,10 +11,10 @@ use std::{
 use anyhow::Result;
 use bigram_language_model::BigramLanguageModel;
 use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::{Optimizer, VarBuilder, VarMap};
+use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use candle_optimisers::adam::{Adam, ParamsAdam};
 use clap::{Parser, ValueEnum};
-use language_model::LanguageModel;
+use language_model::{language_generate, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model: Box<dyn LanguageModel> = match args.model {
+    let model: Box<dyn Module> = match args.model {
         Model::Bigram => Box::new(BigramLanguageModel::new(vb.clone(), vocab_size)?),
     };
 
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
         for _ in 0..EVAL_ITERS {
             let (xs, ys) = get_batch(&data, rng)?;
             let logits = model.forward(&xs)?;
-            let loss = model.loss(&logits, &ys)?;
+            let loss = language_loss(&logits, &ys)?;
             losses.push(loss.to_scalar()?);
         }
         Ok(losses.iter().sum::<f32>() / losses.len() as f32)
@@ -153,7 +153,7 @@ fn main() -> Result<()> {
     for i in 0..=args.epochs {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
-        let loss = model.loss(&logits, &ys)?;
+        let loss = language_loss(&logits, &ys)?;
         sgd.backward_step(&loss)?;
 
         if i % EVAL_INTERVAL == 0 {
@@ -170,7 +170,7 @@ fn main() -> Result<()> {
     }
 
     let mut rng = StdRng::seed_from_u64(seed);
-    let result = model.generate(GENERATE_NUM_CHARS, &mut rng, &device)?;
+    let result = language_generate(&model, GENERATE_NUM_CHARS, &mut rng, &device)?;
     println!("{}", tokenizer.decode(&result)?);
 
     Ok(())
