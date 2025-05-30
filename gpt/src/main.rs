@@ -79,7 +79,7 @@ fn main() -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let seed = args.seed.unwrap_or(timestamp);
     let mut rng = StdRng::seed_from_u64(seed);
-    let device = Device::Cpu;
+    let device = Device::new_cuda(0)?;
 
     let tiny_shakespeare = get_tiny_shakespeare()?;
     let tokenizer = Tokenizer::from_string(&tiny_shakespeare)?;
