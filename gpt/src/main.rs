@@ -149,6 +149,11 @@ fn main() -> Result<()> {
     let estimate_loss = |data: &Tensor, rng: &mut StdRng| -> Result<f32> {
         let mut losses = Vec::with_capacity(EVAL_ITERS);
         for _ in 0..EVAL_ITERS {
+            // TODO: It'd be nice to disable gradient computation here.
+            // I asked on HF Discord and someone said the analog of torch.no_grad
+            // is calling .detach() on inputs, so we could try that, but I'm not
+            // sure if "inputs" means `xs` here, or all the parameters in the actual
+            // model...
             let (xs, ys) = get_batch(&data, rng)?;
             let logits = model.forward(&xs)?;
             let loss = language_loss(&logits, &ys)?;
