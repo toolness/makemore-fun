@@ -1,6 +1,7 @@
 mod bigram_language_model;
 mod language_model;
 mod tokenizer;
+mod transformer_language_model;
 mod util;
 
 use std::{
@@ -17,6 +18,7 @@ use clap::{Parser, ValueEnum};
 use language_model::{language_generate, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
+use transformer_language_model::TransformerLanguageModel;
 
 /// Number of examples in each batch.
 const BATCH_SIZE: usize = 32;
@@ -38,6 +40,7 @@ const GENERATE_NUM_CHARS: usize = 500;
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
     Bigram,
+    Transformer,
 }
 
 #[derive(Parser)]
@@ -124,6 +127,7 @@ fn main() -> Result<()> {
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model: Box<dyn Module> = match args.model {
         Model::Bigram => Box::new(BigramLanguageModel::new(vb.clone(), vocab_size)?),
+        Model::Transformer => Box::new(TransformerLanguageModel::new(vb.clone(), vocab_size)?),
     };
 
     if let Some(load) = &args.load {
@@ -137,7 +141,10 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     let mut sgd = Adam::new(varmap.all_vars(), params)?;
-    println!("varmap vars: {:?}", varmap.all_vars());
+    {
+        let data = varmap.data().lock().unwrap();
+        println!("varmap vars: {:#?}", data);
+    }
 
     let estimate_loss = |data: &Tensor, rng: &mut StdRng| -> Result<f32> {
         let mut losses = Vec::with_capacity(EVAL_ITERS);
