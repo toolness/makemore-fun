@@ -76,8 +76,7 @@ fn get_tiny_shakespeare() -> Result<String> {
 ///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
     let args = Args::parse();
-    let now = SystemTime::now();
-    let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let seed = args.seed.unwrap_or(timestamp);
     let mut rng = StdRng::seed_from_u64(seed);
     let device = Device::Cpu;
@@ -162,6 +161,8 @@ fn main() -> Result<()> {
         Ok(losses.iter().sum::<f32>() / losses.len() as f32)
     };
 
+    let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+
     for i in 0..=args.epochs {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
@@ -173,6 +174,11 @@ fn main() -> Result<()> {
             let val_loss = estimate_loss(&val_data, &mut rng)?;
             println!("epoch {i}: train loss {train_loss:.4}, val loss {val_loss:.4}",);
         }
+    }
+
+    if args.epochs > 0 {
+        let end_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+        println!("Total training time: {} ms", end_time - start_time)
     }
 
     if let Some(save) = &args.save {
