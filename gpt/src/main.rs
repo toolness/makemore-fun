@@ -11,9 +11,9 @@ use std::{
 use anyhow::Result;
 use bigram_language_model::BigramLanguageModel;
 use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
+use candle_nn::{Optimizer, VarBuilder, VarMap};
 use candle_optimisers::adam::{Adam, ParamsAdam};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use language_model::LanguageModel;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
@@ -35,6 +35,11 @@ const EVAL_ITERS: usize = 200;
 /// Number of characters to generate.
 const GENERATE_NUM_CHARS: usize = 500;
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Model {
+    Bigram,
+}
+
 #[derive(Parser)]
 pub struct Args {
     /// Random number seed.
@@ -52,6 +57,9 @@ pub struct Args {
     /// The file to load the trained weights from, in safetensors format.
     #[arg(long)]
     pub load: Option<String>,
+
+    #[arg(long, value_enum, default_value_t = Model::Bigram)]
+    pub model: Model,
 }
 
 fn get_tiny_shakespeare() -> Result<String> {
@@ -114,7 +122,9 @@ fn main() -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BigramLanguageModel::new(vb.clone(), vocab_size)?;
+    let model: Box<dyn LanguageModel> = match args.model {
+        Model::Bigram => Box::new(BigramLanguageModel::new(vb.clone(), vocab_size)?),
+    };
 
     if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
