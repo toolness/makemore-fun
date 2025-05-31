@@ -12,8 +12,7 @@ use std::{
 use anyhow::Result;
 use bigram_language_model::BigramLanguageModel;
 use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
-use candle_optimisers::adam::{Adam, ParamsAdam};
+use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
 use language_model::{language_generate, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -142,11 +141,11 @@ fn main() -> Result<()> {
         varmap.load(load)?;
     }
 
-    let params = ParamsAdam {
+    let params = ParamsAdamW {
         lr: args.lr,
         ..Default::default()
     };
-    let mut optimizer = Adam::new(varmap.all_vars(), params)?;
+    let mut optimizer = AdamW::new(varmap.all_vars(), params)?;
 
     if args.vars {
         let data = varmap.data().lock().unwrap();
