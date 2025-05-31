@@ -68,6 +68,7 @@ impl Module for AttentionHead {
 
 struct MultiAttentionHead {
     heads: Vec<AttentionHead>,
+    proj: Linear,
 }
 
 impl MultiAttentionHead {
@@ -79,7 +80,8 @@ impl MultiAttentionHead {
                 vb.pp(format!("head_{i}")),
             )?);
         }
-        Ok(Self { heads })
+        let proj = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("proj"))?;
+        Ok(Self { heads, proj })
     }
 }
 
@@ -92,19 +94,42 @@ impl Module for MultiAttentionHead {
         for head in self.heads.iter() {
             heads.push(head.forward(xs)?);
         }
-        Ok(Tensor::cat(&heads, 2)?)
+        let cat = Tensor::cat(&heads, 2)?;
+        let out = self.proj.forward(&cat)?;
+        Ok(out)
+    }
+}
+
+pub struct FeedForward {
+    ff: Linear,
+    proj: Linear,
+}
+
+impl FeedForward {
+    pub fn new(vb: VarBuilder) -> Result<Self> {
+        let ff = candle_nn::linear(N_EMBED, 4 * N_EMBED, vb.pp("ff"))?;
+        let proj = candle_nn::linear(4 * N_EMBED, N_EMBED, vb.pp("proj"))?;
+        Ok(Self { ff, proj })
+    }
+}
+
+impl Module for FeedForward {
+    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let out = self.ff.forward(xs)?.relu()?;
+        let out = self.proj.forward(&out)?;
+        Ok(out)
     }
 }
 
 pub struct Block {
     sa_heads: MultiAttentionHead,
-    feed_forward: Linear,
+    feed_forward: FeedForward,
 }
 
 impl Block {
     pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
         let sa_heads = MultiAttentionHead::new(num_heads, vb.pp("sa_heads"))?;
-        let feed_forward = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("feed_forward"))?;
+        let feed_forward = FeedForward::new(vb.pp("feed_forward"))?;
         Ok(Self {
             sa_heads,
             feed_forward,
@@ -114,9 +139,9 @@ impl Block {
 
 impl Module for Block {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let out = self.sa_heads.forward(&xs)?;
-        let out = self.feed_forward.forward(&out)?.relu()?;
-        Ok(out)
+        let xs = (xs + self.sa_heads.forward(&xs)?)?;
+        let xs = (&xs + self.feed_forward.forward(&xs)?)?;
+        Ok(xs)
     }
 }
 
@@ -144,7 +169,7 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let blocks = blocks(vec![Block::new(4, vb.pp("block"))?]);
+        let blocks = blocks(vec![Block::new(4, vb.pp("block0"))?]);
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
