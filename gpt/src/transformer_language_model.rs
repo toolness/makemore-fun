@@ -27,7 +27,7 @@ impl AttentionHead {
 
         // It's annoying that we have to put this in its own tensor, since it's just
         // a matrix full of negative infinity... I wish we could just use a scalar or something.
-        let neg_infinity = Tensor::full(f32::NEG_INFINITY, (BLOCK_SIZE, BLOCK_SIZE), vb.device())?;
+        let neg_infinity = Tensor::full(f32::NEG_INFINITY, (1,), vb.device())?;
 
         Ok(Self {
             key,
@@ -59,7 +59,6 @@ impl Module for AttentionHead {
             &wei,
             &self
                 .neg_infinity
-                .i((0..time_steps, 0..time_steps))?
                 .broadcast_as((batches, time_steps, time_steps))?,
         )?;
         let wei = softmax(&wei, 2)?;
