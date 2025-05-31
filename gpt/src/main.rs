@@ -146,7 +146,7 @@ fn main() -> Result<()> {
         lr: args.lr,
         ..Default::default()
     };
-    let mut sgd = Adam::new(varmap.all_vars(), params)?;
+    let mut optimizer = Adam::new(varmap.all_vars(), params)?;
 
     if args.vars {
         let data = varmap.data().lock().unwrap();
@@ -184,7 +184,7 @@ fn main() -> Result<()> {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
-        sgd.backward_step(&loss)?;
+        optimizer.backward_step(&loss)?;
 
         if i % EVAL_INTERVAL == 0 || i == args.epochs {
             calculate_loss(format!("Epoch {i}"), &mut rng)?;
