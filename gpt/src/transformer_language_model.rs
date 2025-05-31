@@ -10,7 +10,7 @@ use crate::BLOCK_SIZE;
 const N_EMBED: usize = 32;
 
 /// Number of dimensions in self-attention heads
-const HEAD_SIZE: usize = 16;
+const HEAD_SIZE: usize = 32;
 
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
@@ -34,7 +34,6 @@ impl TransformerLanguageModel {
         let query = candle_nn::linear_no_bias(N_EMBED, HEAD_SIZE, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, HEAD_SIZE, vb.pp("value"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
-        // TODO: Add the rest of the modules!
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
@@ -71,11 +70,7 @@ impl Module for TransformerLanguageModel {
         )?;
         let wei = softmax(&wei, 2)?;
         let out = wei.matmul(&v)?;
-
-        // TODO: Finish implementing this.
-        println!("{}", out);
-
-        let logits = self.language_head.forward(&x)?;
+        let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
 }
