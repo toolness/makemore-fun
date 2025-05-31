@@ -160,24 +160,34 @@ fn main() -> Result<()> {
         Ok(losses.iter().sum::<f32>() / losses.len() as f32)
     };
 
+    let calculate_loss = |prefix: String, rng: &mut StdRng| -> Result<()> {
+        let train_loss = estimate_loss(&train_data, rng)?;
+        let val_loss = estimate_loss(&val_data, rng)?;
+        println!("{prefix} train loss {train_loss:.4}, val loss {val_loss:.4}",);
+        Ok(())
+    };
+
     let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
 
-    for i in 0..=args.epochs {
+    if args.epochs > 0 {
+        calculate_loss("Initial".to_owned(), &mut rng)?;
+    }
+    for i in 1..=args.epochs {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
         sgd.backward_step(&loss)?;
 
-        if i % EVAL_INTERVAL == 0 {
-            let train_loss = estimate_loss(&train_data, &mut rng)?;
-            let val_loss = estimate_loss(&val_data, &mut rng)?;
-            println!("epoch {i}: train loss {train_loss:.4}, val loss {val_loss:.4}",);
+        if i % EVAL_INTERVAL == 0 || i == args.epochs {
+            calculate_loss(format!("Epoch {i}"), &mut rng)?;
         }
     }
 
     if args.epochs > 0 {
         let end_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
         println!("Total training time: {} ms", end_time - start_time)
+    } else {
+        calculate_loss("Model".to_owned(), &mut rng)?;
     }
 
     if let Some(save) = &args.save {
