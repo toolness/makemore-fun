@@ -14,6 +14,8 @@ struct AttentionHead {
     query: Linear,
     value: Linear,
     head_size: usize,
+    tril: Tensor,
+    neg_infinity: Tensor,
 }
 
 impl AttentionHead {
@@ -21,18 +23,25 @@ impl AttentionHead {
         let key = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("key"))?;
         let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
+        let tril = Tensor::tril2(BLOCK_SIZE, DType::U8, vb.device())?;
+
+        // It's annoying that we have to put this in its own tensor, since it's just
+        // a matrix full of negative infinity... I wish we could just use a scalar or something.
+        let neg_infinity = Tensor::full(f32::NEG_INFINITY, (BLOCK_SIZE, BLOCK_SIZE), vb.device())?;
+
         Ok(Self {
             key,
             query,
             value,
             head_size,
+            tril,
+            neg_infinity,
         })
     }
 }
 
 impl Module for AttentionHead {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let device = self.key.weight().device();
         let batches = xs.dims3()?.0;
         let time_steps = xs.dims3()?.1;
 
@@ -42,11 +51,16 @@ impl Module for AttentionHead {
 
         let wei = (q.matmul(&k.transpose(1, 2)?)? / (self.head_size as f64).powf(0.5))?;
         assert_eq!(wei.dims3()?, (batches, time_steps, time_steps));
-        let tril_mask = Tensor::tril2(time_steps, DType::U8, device)?
+        let tril_mask = self
+            .tril
+            .i((0..time_steps, 0..time_steps))?
             .broadcast_as((batches, time_steps, time_steps))?;
         let wei = tril_mask.where_cond(
             &wei,
-            &Tensor::full(f32::NEG_INFINITY, (batches, time_steps, time_steps), device)?,
+            &self
+                .neg_infinity
+                .i((0..time_steps, 0..time_steps))?
+                .broadcast_as((batches, time_steps, time_steps))?,
         )?;
         let wei = softmax(&wei, 2)?;
         let out = wei.matmul(&v)?;
