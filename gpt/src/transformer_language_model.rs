@@ -169,7 +169,19 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let blocks = blocks(vec![Block::new(4, vb.pp("block0"))?]);
+        let blocks = blocks(vec![
+            Block::new(4, vb.pp("block0"))?,
+            // TODO: These extra blocks don't actually seem to improve things; given the same
+            // number of epochs, performance actually *regresses*, and even doubling the number
+            // of epochs for this multi-block version doesn't match the loss of the single-block
+            // version. This is very strange, because in Karpathy's video the performance improves:
+            //
+            //   https://youtu.be/kCc8FmEb1nY?si=YHhf6gihGsdACYaz&t=5540
+            //
+            // So for now I'm just commenting out the extra blocks.
+            //Block::new(4, vb.pp("block1"))?,
+            //Block::new(4, vb.pp("block2"))?,
+        ]);
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
