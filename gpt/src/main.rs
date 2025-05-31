@@ -34,9 +34,6 @@ const EVAL_INTERVAL: usize = 300;
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
 
-/// Number of characters to generate.
-const GENERATE_NUM_CHARS: usize = 500;
-
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
     Bigram,
@@ -52,6 +49,10 @@ pub struct Args {
     /// Number of epochs to train the model.
     #[arg(long, default_value_t = 3_000)]
     pub epochs: usize,
+
+    /// Number of characters of output to generate.
+    #[arg(long, default_value_t = 500)]
+    pub chars: usize,
 
     /// The file to save the trained weights to, in safetensors format.
     #[arg(long)]
@@ -196,9 +197,11 @@ fn main() -> Result<()> {
         varmap.save(save)?;
     }
 
-    let mut rng = StdRng::seed_from_u64(seed);
-    let result = language_generate(&model, GENERATE_NUM_CHARS, &mut rng, &device)?;
-    println!("{}", tokenizer.decode(&result)?);
+    if args.chars > 0 {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let result = language_generate(&model, args.chars, &mut rng, &device)?;
+        println!("{}", tokenizer.decode(&result)?);
+    }
 
     Ok(())
 }
