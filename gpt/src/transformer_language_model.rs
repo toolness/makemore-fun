@@ -96,12 +96,35 @@ impl Module for MultiAttentionHead {
     }
 }
 
+pub struct Block {
+    sa_heads: MultiAttentionHead,
+    feed_forward: Linear,
+}
+
+impl Block {
+    pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
+        let sa_heads = MultiAttentionHead::new(num_heads, vb.pp("sa_heads"))?;
+        let feed_forward = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("feed_forward"))?;
+        Ok(Self {
+            sa_heads,
+            feed_forward,
+        })
+    }
+}
+
+impl Module for Block {
+    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let out = self.sa_heads.forward(&xs)?;
+        let out = self.feed_forward.forward(&out)?.relu()?;
+        Ok(out)
+    }
+}
+
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
     positions: Tensor,
-    sa_heads: MultiAttentionHead,
-    feed_forward: Linear,
+    block: Block,
     language_head: Linear,
 }
 
@@ -113,15 +136,13 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let sa_heads = MultiAttentionHead::new(4, vb.pp("sa_heads"))?;
-        let feed_forward = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("feed_forward"))?;
+        let block = Block::new(4, vb.pp("block"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
             positions,
-            sa_heads,
-            feed_forward,
+            block,
             language_head,
         })
     }
@@ -135,8 +156,7 @@ impl Module for TransformerLanguageModel {
             .position_embedding_table
             .forward(&self.positions.i(0..time_steps)?)?;
         let x = tok_emb.broadcast_add(&pos_emb)?;
-        let out = self.sa_heads.forward(&x)?;
-        let out = self.feed_forward.forward(&out)?.relu()?;
+        let out = self.block.forward(&x)?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
