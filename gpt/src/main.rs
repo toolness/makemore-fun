@@ -26,8 +26,6 @@ const BATCH_SIZE: usize = 32;
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
 
-const LEARNING_RATE: f64 = 1e-2;
-
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 300;
 
@@ -64,6 +62,10 @@ pub struct Args {
 
     #[arg(long, value_enum, default_value_t = Model::Bigram)]
     pub model: Model,
+
+    /// The learning rate.
+    #[arg(long, default_value_t = 0.01)]
+    pub lr: f64,
 }
 
 fn get_tiny_shakespeare() -> Result<String> {
@@ -137,7 +139,7 @@ fn main() -> Result<()> {
     }
 
     let params = ParamsAdam {
-        lr: LEARNING_RATE,
+        lr: args.lr,
         ..Default::default()
     };
     let mut sgd = Adam::new(varmap.all_vars(), params)?;
