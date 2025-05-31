@@ -40,6 +40,10 @@ pub enum Model {
 
 #[derive(Parser)]
 pub struct Args {
+    /// Whether to display information about the variables in the network.
+    #[arg(long, default_value_t = false)]
+    pub vars: bool,
+
     /// Random number seed.
     #[arg(long)]
     pub seed: Option<u64>,
@@ -143,7 +147,8 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     let mut sgd = Adam::new(varmap.all_vars(), params)?;
-    {
+
+    if args.vars {
         let data = varmap.data().lock().unwrap();
         println!("varmap vars: {:#?}", data);
     }
