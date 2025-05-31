@@ -101,6 +101,7 @@ pub struct TransformerLanguageModel {
     position_embedding_table: Embedding,
     positions: Tensor,
     sa_heads: MultiAttentionHead,
+    feed_forward: Linear,
     language_head: Linear,
 }
 
@@ -113,12 +114,14 @@ impl TransformerLanguageModel {
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
         let sa_heads = MultiAttentionHead::new(4, vb.pp("sa_heads"))?;
+        let feed_forward = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("feed_forward"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
             positions,
             sa_heads,
+            feed_forward,
             language_head,
         })
     }
@@ -133,6 +136,7 @@ impl Module for TransformerLanguageModel {
             .forward(&self.positions.i(0..time_steps)?)?;
         let x = tok_emb.broadcast_add(&pos_emb)?;
         let out = self.sa_heads.forward(&x)?;
+        let out = self.feed_forward.forward(&out)?.relu()?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
