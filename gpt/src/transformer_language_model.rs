@@ -1,6 +1,8 @@
+use core::f32;
+
 use anyhow::Result;
-use candle_core::{IndexOp, Tensor};
-use candle_nn::{Embedding, Linear, Module, VarBuilder};
+use candle_core::{DType, IndexOp, Tensor};
+use candle_nn::{Embedding, Linear, Module, VarBuilder, ops::softmax};
 
 use crate::BLOCK_SIZE;
 
@@ -44,6 +46,7 @@ impl TransformerLanguageModel {
 
 impl Module for TransformerLanguageModel {
     fn forward(&self, xs: &Tensor) -> Result<candle_core::Tensor, candle_core::Error> {
+        let device = self.positions.device();
         let time_steps = xs.dims2()?.1;
         let tok_emb = self.token_embedding_table.forward(xs)?;
         let pos_emb = self
@@ -53,9 +56,17 @@ impl Module for TransformerLanguageModel {
         let k = self.key.forward(&x)?;
         let q = self.query.forward(&x)?;
 
-        // TODO: Implement the rest of this!
-        let _ = k;
-        let _ = q;
+        // TODO: wei shouldn't be zero, it should be q @ k.T
+        let _ = (k, q);
+        let wei = Tensor::zeros((time_steps, time_steps), DType::F32, device)?;
+        let tril_mask = Tensor::tril2(time_steps, DType::U8, device)?;
+        let wei = tril_mask.where_cond(
+            &wei,
+            &Tensor::full(f32::NEG_INFINITY, (time_steps, time_steps), device)?,
+        )?;
+        let wei = softmax(&wei, 1)?;
+        // TODO: Finish implementing this.
+        println!("{}", wei);
 
         let logits = self.language_head.forward(&x)?;
         Ok(logits)
