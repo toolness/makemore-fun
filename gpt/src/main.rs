@@ -128,8 +128,8 @@ fn main() -> Result<()> {
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model: Box<dyn Module> = match args.model {
-        Model::Bigram => Box::new(BigramLanguageModel::new(vb.clone(), vocab_size)?),
-        Model::Transformer => Box::new(TransformerLanguageModel::new(vb.clone(), vocab_size)?),
+        Model::Bigram => Box::new(BigramLanguageModel::new(vocab_size, vb.clone())?),
+        Model::Transformer => Box::new(TransformerLanguageModel::new(vocab_size, vb.clone())?),
     };
 
     if let Some(load) = &args.load {

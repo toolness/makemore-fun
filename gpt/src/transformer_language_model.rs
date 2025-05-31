@@ -105,7 +105,7 @@ pub struct TransformerLanguageModel {
 }
 
 impl TransformerLanguageModel {
-    pub fn new(vb: VarBuilder, vocab_size: usize) -> Result<Self> {
+    pub fn new(vocab_size: usize, vb: VarBuilder) -> Result<Self> {
         let device = vb.device();
         let token_embedding_table =
             candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;

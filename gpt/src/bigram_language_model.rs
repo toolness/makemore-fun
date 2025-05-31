@@ -7,7 +7,7 @@ pub struct BigramLanguageModel {
 }
 
 impl BigramLanguageModel {
-    pub fn new(vb: VarBuilder, vocab_size: usize) -> Result<Self> {
+    pub fn new(vocab_size: usize, vb: VarBuilder) -> Result<Self> {
         let token_embedding_table = candle_nn::embedding(vocab_size, vocab_size, vb)?;
         Ok(Self {
             token_embedding_table,
