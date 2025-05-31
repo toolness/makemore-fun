@@ -2,23 +2,12 @@ use core::f32;
 
 use anyhow::Result;
 use candle_core::{DType, IndexOp, Tensor};
-use candle_nn::{Embedding, LayerNorm, Linear, Module, Sequential, VarBuilder, ops::softmax};
+use candle_nn::{Embedding, Linear, Module, Sequential, VarBuilder, ops::softmax};
 
 use crate::BLOCK_SIZE;
 
 /// Number of dimensions in embedding space.
 const N_EMBED: usize = 32;
-
-const LAYER_NORM_EPSILON: f64 = 1e-5;
-
-fn layer_norm(vb: VarBuilder) -> Result<LayerNorm> {
-    let norm = LayerNorm::new(
-        vb.get_with_hints(N_EMBED, "weight", candle_nn::init::ONE)?,
-        vb.get_with_hints(N_EMBED, "bias", candle_nn::init::ZERO)?,
-        LAYER_NORM_EPSILON,
-    );
-    Ok(norm)
-}
 
 struct AttentionHead {
     key: Linear,
@@ -135,29 +124,23 @@ impl Module for FeedForward {
 pub struct Block {
     sa_heads: MultiAttentionHead,
     feed_forward: FeedForward,
-    ln1: LayerNorm,
-    ln2: LayerNorm,
 }
 
 impl Block {
     pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
         let sa_heads = MultiAttentionHead::new(num_heads, vb.pp("sa_heads"))?;
-        let ln1 = layer_norm(vb.pp("ln1"))?;
         let feed_forward = FeedForward::new(vb.pp("feed_forward"))?;
-        let ln2 = layer_norm(vb.pp("ln2"))?;
         Ok(Self {
             sa_heads,
             feed_forward,
-            ln1,
-            ln2,
         })
     }
 }
 
 impl Module for Block {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let xs = (xs + self.sa_heads.forward(&self.ln1.forward(&xs)?)?)?;
-        let xs = (&xs + self.feed_forward.forward(&self.ln2.forward(&xs)?)?)?;
+        let xs = (xs + self.sa_heads.forward(&xs)?)?;
+        let xs = (&xs + self.feed_forward.forward(&xs)?)?;
         Ok(xs)
     }
 }
@@ -175,7 +158,6 @@ pub struct TransformerLanguageModel {
     position_embedding_table: Embedding,
     positions: Tensor,
     blocks: Sequential,
-    layer_norm: LayerNorm,
     language_head: Linear,
 }
 
@@ -200,14 +182,12 @@ impl TransformerLanguageModel {
             //Block::new(4, vb.pp("block1"))?,
             //Block::new(4, vb.pp("block2"))?,
         ]);
-        let layer_norm = layer_norm(vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
             positions,
             blocks,
-            layer_norm,
             language_head,
         })
     }
@@ -222,7 +202,6 @@ impl Module for TransformerLanguageModel {
             .forward(&self.positions.i(0..time_steps)?)?;
         let x = tok_emb.broadcast_add(&pos_emb)?;
         let out = self.blocks.forward(&x)?;
-        let out = self.layer_norm.forward(&out)?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
