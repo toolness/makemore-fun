@@ -18,6 +18,7 @@ pub struct TransformerLanguageModel {
     positions: Tensor,
     key: Linear,
     query: Linear,
+    value: Linear,
     language_head: Linear,
 }
 
@@ -31,6 +32,7 @@ impl TransformerLanguageModel {
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
         let key = candle_nn::linear_no_bias(N_EMBED, HEAD_SIZE, vb.pp("key"))?;
         let query = candle_nn::linear_no_bias(N_EMBED, HEAD_SIZE, vb.pp("query"))?;
+        let value = candle_nn::linear_no_bias(N_EMBED, HEAD_SIZE, vb.pp("value"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         // TODO: Add the rest of the modules!
         Ok(Self {
@@ -39,6 +41,7 @@ impl TransformerLanguageModel {
             positions,
             key,
             query,
+            value,
             language_head,
         })
     }
@@ -56,6 +59,7 @@ impl Module for TransformerLanguageModel {
         let x = tok_emb.broadcast_add(&pos_emb)?;
         let k = self.key.forward(&x)?;
         let q = self.query.forward(&x)?;
+        let v = self.value.forward(&x)?;
 
         let wei = q.matmul(&k.transpose(1, 2)?)?;
         assert_eq!(wei.dims3()?, (batches, time_steps, time_steps));
@@ -66,8 +70,10 @@ impl Module for TransformerLanguageModel {
             &Tensor::full(f32::NEG_INFINITY, (batches, time_steps, time_steps), device)?,
         )?;
         let wei = softmax(&wei, 2)?;
+        let out = wei.matmul(&v)?;
+
         // TODO: Finish implementing this.
-        println!("{}", wei);
+        println!("{}", out);
 
         let logits = self.language_head.forward(&x)?;
         Ok(logits)
