@@ -66,11 +66,41 @@ impl Module for AttentionHead {
     }
 }
 
+struct MultiAttentionHead {
+    heads: Vec<AttentionHead>,
+}
+
+impl MultiAttentionHead {
+    pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
+        let mut heads = Vec::with_capacity(num_heads);
+        for i in 0..num_heads {
+            heads.push(AttentionHead::new(
+                N_EMBED / num_heads,
+                vb.pp(format!("head_{i}")),
+            )?);
+        }
+        Ok(Self { heads })
+    }
+}
+
+impl Module for MultiAttentionHead {
+    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let mut heads = Vec::with_capacity(self.heads.len());
+        // TODO: I think these heads are going to be executed serially, rather than in parallel.
+        // But I'm just following Karpathy's video for now, and he does this using a Python
+        // list comprehension, so I'm just gonna do what he's doing for now.
+        for head in self.heads.iter() {
+            heads.push(head.forward(xs)?);
+        }
+        Ok(Tensor::cat(&heads, 2)?)
+    }
+}
+
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
     positions: Tensor,
-    sa_head: AttentionHead,
+    sa_heads: MultiAttentionHead,
     language_head: Linear,
 }
 
@@ -82,13 +112,13 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let sa_head = AttentionHead::new(N_EMBED, vb.pp("sa_head"))?;
+        let sa_heads = MultiAttentionHead::new(4, vb.pp("sa_heads"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
             positions,
-            sa_head,
+            sa_heads,
             language_head,
         })
     }
@@ -102,7 +132,7 @@ impl Module for TransformerLanguageModel {
             .position_embedding_table
             .forward(&self.positions.i(0..time_steps)?)?;
         let x = tok_emb.broadcast_add(&pos_emb)?;
-        let out = self.sa_head.forward(&x)?;
+        let out = self.sa_heads.forward(&x)?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
