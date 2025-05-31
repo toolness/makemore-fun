@@ -2,7 +2,7 @@ use core::f32;
 
 use anyhow::Result;
 use candle_core::{DType, IndexOp, Tensor};
-use candle_nn::{Embedding, Linear, Module, VarBuilder, ops::softmax};
+use candle_nn::{Embedding, Linear, Module, Sequential, VarBuilder, ops::softmax};
 
 use crate::BLOCK_SIZE;
 
@@ -120,11 +120,19 @@ impl Module for Block {
     }
 }
 
+fn blocks(blocks: Vec<Block>) -> Sequential {
+    let mut seq = candle_nn::seq();
+    for block in blocks {
+        seq = seq.add(block);
+    }
+    seq
+}
+
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
     positions: Tensor,
-    block: Block,
+    blocks: Sequential,
     language_head: Linear,
 }
 
@@ -136,13 +144,13 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let block = Block::new(4, vb.pp("block"))?;
+        let blocks = blocks(vec![Block::new(4, vb.pp("block"))?]);
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
             positions,
-            block,
+            blocks,
             language_head,
         })
     }
@@ -156,7 +164,7 @@ impl Module for TransformerLanguageModel {
             .position_embedding_table
             .forward(&self.positions.i(0..time_steps)?)?;
         let x = tok_emb.broadcast_add(&pos_emb)?;
-        let out = self.block.forward(&x)?;
+        let out = self.blocks.forward(&x)?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
     }
