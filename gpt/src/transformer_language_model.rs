@@ -61,7 +61,7 @@ impl Module for TransformerLanguageModel {
         let q = self.query.forward(&x)?;
         let v = self.value.forward(&x)?;
 
-        let wei = q.matmul(&k.transpose(1, 2)?)?;
+        let wei = (q.matmul(&k.transpose(1, 2)?)? / (HEAD_SIZE as f64).powf(0.5))?;
         assert_eq!(wei.dims3()?, (batches, time_steps, time_steps));
         let tril_mask = Tensor::tril2(time_steps, DType::U8, device)?
             .broadcast_as((batches, time_steps, time_steps))?;
