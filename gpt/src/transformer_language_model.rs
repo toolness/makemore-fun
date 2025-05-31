@@ -47,6 +47,7 @@ impl TransformerLanguageModel {
 impl Module for TransformerLanguageModel {
     fn forward(&self, xs: &Tensor) -> Result<candle_core::Tensor, candle_core::Error> {
         let device = self.positions.device();
+        let batches = xs.dims2()?.0;
         let time_steps = xs.dims2()?.1;
         let tok_emb = self.token_embedding_table.forward(xs)?;
         let pos_emb = self
@@ -56,15 +57,15 @@ impl Module for TransformerLanguageModel {
         let k = self.key.forward(&x)?;
         let q = self.query.forward(&x)?;
 
-        // TODO: wei shouldn't be zero, it should be q @ k.T
-        let _ = (k, q);
-        let wei = Tensor::zeros((time_steps, time_steps), DType::F32, device)?;
-        let tril_mask = Tensor::tril2(time_steps, DType::U8, device)?;
+        let wei = q.matmul(&k.transpose(1, 2)?)?;
+        assert_eq!(wei.dims3()?, (batches, time_steps, time_steps));
+        let tril_mask = Tensor::tril2(time_steps, DType::U8, device)?
+            .broadcast_as((batches, time_steps, time_steps))?;
         let wei = tril_mask.where_cond(
             &wei,
-            &Tensor::full(f32::NEG_INFINITY, (time_steps, time_steps), device)?,
+            &Tensor::full(f32::NEG_INFINITY, (batches, time_steps, time_steps), device)?,
         )?;
-        let wei = softmax(&wei, 1)?;
+        let wei = softmax(&wei, 2)?;
         // TODO: Finish implementing this.
         println!("{}", wei);
 
