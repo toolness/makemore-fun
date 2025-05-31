@@ -42,8 +42,7 @@ impl AttentionHead {
 
 impl Module for AttentionHead {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let batches = xs.dims3()?.0;
-        let time_steps = xs.dims3()?.1;
+        let (batches, time_steps, _) = xs.dims3()?;
 
         let k = self.key.forward(&xs)?;
         let q = self.query.forward(&xs)?;
