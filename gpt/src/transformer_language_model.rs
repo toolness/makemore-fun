@@ -17,9 +17,6 @@ const N_EMBED: usize = 32;
 /// Pytorch's default.
 const LAYER_NORM_EPSILON: f64 = 1e-5;
 
-/// Probability of an element to be zeroed-out.
-const DROPOUT_PROB: f32 = 0.2;
-
 /// This is similar to candle_nn::Dropout with a few salient differences:
 ///
 ///   * Instead of implementing `ModuleT`, it detects whether
@@ -93,12 +90,12 @@ struct AttentionHead {
 }
 
 impl AttentionHead {
-    pub fn new(head_size: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(head_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let key = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("key"))?;
         let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
         let tril = Tensor::tril2(BLOCK_SIZE, DType::U8, vb.device())?;
-        let dropout = Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(drop_p);
 
         // It's annoying that we have to put this in its own tensor, since it's just
         // a matrix full of negative infinity... I wish we could just use a scalar or something.
@@ -150,16 +147,17 @@ struct MultiAttentionHead {
 }
 
 impl MultiAttentionHead {
-    pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let mut heads = Vec::with_capacity(num_heads);
         for i in 0..num_heads {
             heads.push(AttentionHead::new(
                 N_EMBED / num_heads,
+                drop_p,
                 vb.pp(format!("head_{i}")),
             )?);
         }
         let proj = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("proj"))?;
-        let dropout = Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(drop_p);
         Ok(Self {
             heads,
             proj,
@@ -191,10 +189,10 @@ pub struct FeedForward {
 }
 
 impl FeedForward {
-    pub fn new(vb: VarBuilder) -> Result<Self> {
+    pub fn new(drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let ff = candle_nn::linear(N_EMBED, 4 * N_EMBED, vb.pp("ff"))?;
         let proj = candle_nn::linear(4 * N_EMBED, N_EMBED, vb.pp("proj"))?;
-        let dropout = Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(drop_p);
         Ok(Self { ff, proj, dropout })
     }
 }
@@ -216,10 +214,10 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(num_heads: usize, vb: VarBuilder) -> Result<Self> {
-        let sa_heads = MultiAttentionHead::new(num_heads, vb.pp("sa_heads"))?;
+    pub fn new(num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+        let sa_heads = MultiAttentionHead::new(num_heads, drop_p, vb.pp("sa_heads"))?;
         let ln1 = LayerNorm::new(vb.pp("layer_norm1"))?;
-        let feed_forward = FeedForward::new(vb.pp("feed_forward"))?;
+        let feed_forward = FeedForward::new(drop_p, vb.pp("feed_forward"))?;
         let ln2 = LayerNorm::new(vb.pp("layer_norm2"))?;
         Ok(Self {
             sa_heads,
@@ -248,7 +246,7 @@ pub struct TransformerLanguageModel {
 }
 
 impl TransformerLanguageModel {
-    pub fn new(num_blocks: usize, vocab_size: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(num_blocks: usize, vocab_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let device = vb.device();
         let token_embedding_table =
             candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;
@@ -257,7 +255,7 @@ impl TransformerLanguageModel {
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
         let mut blocks = candle_nn::seq();
         for i in 0..num_blocks {
-            blocks = blocks.add(Block::new(4, vb.pp(format!("block{i}")))?);
+            blocks = blocks.add(Block::new(4, drop_p, vb.pp(format!("block{i}")))?);
         }
         let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;

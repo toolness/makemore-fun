@@ -75,6 +75,10 @@ pub struct Args {
     /// The learning rate.
     #[arg(long, default_value_t = 0.01)]
     pub lr: f64,
+
+    /// Dropout probability (used only when model is transformer).
+    #[arg(long, default_value_t = 0.0)]
+    pub dropout: f32,
 }
 
 fn get_tiny_shakespeare() -> Result<String> {
@@ -143,6 +147,7 @@ fn main() -> Result<()> {
             Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
                 args.blocks,
                 vocab_size,
+                args.dropout,
                 vb,
             )?)),
         }
