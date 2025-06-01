@@ -5,6 +5,7 @@ mod transformer_language_model;
 mod util;
 
 use std::{
+    collections::HashMap,
     ops::Deref,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -166,25 +167,35 @@ fn main() -> Result<()> {
         println!("varmap vars: {:#?}", data);
     }
 
+    let create_model_no_grad = || -> Result<Box<dyn Module>> {
+        // "Freeze" the varmap as detached tensors to ensure that gradients aren't calculated
+        // for our parameters. While this doesn't actually seem to improve performance, it _does_
+        // seem to result in better training, since our evals don't mess with our optimizer: when
+        // running with `--epochs=5000 --lr=1e-3 --blocks=1` the loss improves from 2.193 to 2.179
+        // when using the no-gradient variant of the model for evals.
+        let varmap_data = varmap.data().lock().unwrap();
+        let mut detached_vars: HashMap<String, Tensor> = HashMap::with_capacity(varmap_data.len());
+        for (path, var) in varmap_data.iter() {
+            detached_vars.insert(path.clone(), var.as_detached_tensor());
+        }
+        create_model(VarBuilder::from_tensors(detached_vars, DType::F32, &device))
+    };
+
     let estimate_loss = |data: &Tensor, rng: &mut StdRng| -> Result<f32> {
         let mut losses = Vec::with_capacity(EVAL_ITERS);
+        let model_no_grad = create_model_no_grad()?;
         for _ in 0..EVAL_ITERS {
             // I asked on HF Discord and someone said the analog of torch.no_grad
-            // is calling .detach() on inputs, so that's what we'll do. In practice this
-            // does reduce training time by a small amount: on 3000 epochs of the bigram model,
-            // training time went from 1131 ms to 1107 ms.
-            //
-            // TODO: Actually, I'm not really sure if the advice I was given is correct.
-            // Try adding the following logging just after we call get_batch():
+            // is calling .detach() on inputs, but I'm not really sure if the advice I was
+            // given is correct. Try adding the following logging just after we call get_batch():
             //
             //     println!("xs is_variable={} track_op={}", xs.is_variable(), xs.track_op());
             //
             // This will show false for both, which makes sense--we don't _want_ to treat
             // the input as a variable or track its gradient. Then looking at the implementation
             // for is_variable(), track_op() and detach(), it's clear that `xs` is just being
-            // cloned when we call detach() and nothing more... I don't think it will actually
-            // disable the tracking of backprop at all. That also means our gradients might get
-            // totally messed up every time we estimate the loss.
+            // cloned when we call detach() and nothing more... If that's the case, it means our
+            // gradients might get totally messed up every time we estimate the loss.
             //
             // Another way to demonstrate this is by actually using detach() during _training_
             // and displaying the gradients. If detach() is working, then no gradients should
@@ -192,10 +203,11 @@ fn main() -> Result<()> {
             // _are_ being calculated.
             //
             // I think the "real" way to disable backprop calculation is to actually detach
-            // the _variables_, not the inputs.
+            // the _variables_, not the inputs, which is why I wrote `create_model_no_grad`
+            // above.
             let (xs, ys) = get_batch(&data, rng)?;
-            let logits = model.forward(&xs.detach())?;
-            let loss = language_loss(&logits, &ys.detach())?;
+            let logits = model_no_grad.forward(&xs)?;
+            let loss = language_loss(&logits, &ys)?;
             losses.push(loss.to_scalar()?);
         }
         Ok(losses.iter().sum::<f32>() / losses.len() as f32)
@@ -258,7 +270,8 @@ fn main() -> Result<()> {
 
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
-        let result = language_generate(&model, args.chars, &mut rng, &device)?;
+        let model_no_grad = create_model_no_grad()?;
+        let result = language_generate(&model_no_grad, args.chars, &mut rng, &device)?;
         println!("{}", tokenizer.decode(&result)?);
     }
 
