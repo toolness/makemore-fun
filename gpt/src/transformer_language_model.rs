@@ -2,7 +2,10 @@ use core::f32;
 
 use anyhow::Result;
 use candle_core::{D, DType, IndexOp, Tensor};
-use candle_nn::{Dropout, Embedding, Linear, Module, Sequential, VarBuilder, ops::softmax};
+use candle_nn::{
+    Embedding, Linear, Module, Sequential, VarBuilder,
+    ops::{dropout, softmax},
+};
 
 use crate::BLOCK_SIZE;
 
@@ -16,6 +19,36 @@ const LAYER_NORM_EPSILON: f64 = 1e-5;
 
 /// Probability of an element to be zeroed-out.
 const DROPOUT_PROB: f32 = 0.2;
+
+/// This is similar to candle_nn::Dropout with a few salient differences:
+///
+///   * Instead of implementing `ModuleT`, it detects whether
+///     we're training by checking whether the input tensor is part of a
+///     computation graph.
+///
+///   * If `drop_p` is zero, we disable dropout completely, which means
+///     there's no efficiency penalty.
+struct Dropout {
+    drop_p: f32,
+}
+
+impl Dropout {
+    pub fn new(drop_p: f32) -> Dropout {
+        Self { drop_p }
+    }
+}
+
+impl Module for Dropout {
+    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let is_training = xs.track_op();
+
+        if self.drop_p > 0.0 && is_training {
+            dropout(xs, self.drop_p)
+        } else {
+            Ok(xs.clone())
+        }
+    }
+}
 
 /// We're implementing our own layer norm because Candle's built-in one doesn't
 /// seem to support backprop: https://github.com/huggingface/candle/issues/2977
@@ -65,7 +98,7 @@ impl AttentionHead {
         let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
         let tril = Tensor::tril2(BLOCK_SIZE, DType::U8, vb.device())?;
-        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(DROPOUT_PROB);
 
         // It's annoying that we have to put this in its own tensor, since it's just
         // a matrix full of negative infinity... I wish we could just use a scalar or something.
@@ -104,7 +137,7 @@ impl Module for AttentionHead {
                 .broadcast_as((batches, time_steps, time_steps))?,
         )?;
         let wei = softmax(&wei, 2)?;
-        let wei = self.dropout.forward(&wei, xs.track_op())?;
+        let wei = self.dropout.forward(&wei)?;
         let out = wei.matmul(&v)?;
         Ok(out)
     }
@@ -126,7 +159,7 @@ impl MultiAttentionHead {
             )?);
         }
         let proj = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("proj"))?;
-        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(DROPOUT_PROB);
         Ok(Self {
             heads,
             proj,
@@ -146,7 +179,7 @@ impl Module for MultiAttentionHead {
         }
         let cat = Tensor::cat(&heads, 2)?;
         let out = self.proj.forward(&cat)?;
-        let out = self.dropout.forward(&out, xs.track_op())?;
+        let out = self.dropout.forward(&out)?;
         Ok(out)
     }
 }
@@ -161,7 +194,7 @@ impl FeedForward {
     pub fn new(vb: VarBuilder) -> Result<Self> {
         let ff = candle_nn::linear(N_EMBED, 4 * N_EMBED, vb.pp("ff"))?;
         let proj = candle_nn::linear(4 * N_EMBED, N_EMBED, vb.pp("proj"))?;
-        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
+        let dropout = Dropout::new(DROPOUT_PROB);
         Ok(Self { ff, proj, dropout })
     }
 }
@@ -170,7 +203,7 @@ impl Module for FeedForward {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
         let out = self.ff.forward(xs)?.relu()?;
         let out = self.proj.forward(&out)?;
-        let out = self.dropout.forward(&out, xs.track_op())?;
+        let out = self.dropout.forward(&out)?;
         Ok(out)
     }
 }
