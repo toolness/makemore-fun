@@ -198,6 +198,8 @@ fn main() -> Result<()> {
                     } else if grad_norm < 1e-6 {
                         println!("  ⚠️  WARNING: Vanishing gradient!");
                     }
+                } else {
+                    println!("⚠️  WARNING: No gradient for {name}!");
                 }
             }
         }
