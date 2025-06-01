@@ -164,6 +164,18 @@ fn main() -> Result<()> {
             // is calling .detach() on inputs, so that's what we'll do. In practice this
             // does reduce training time by a small amount: on 3000 epochs of the bigram model,
             // training time went from 1131 ms to 1107 ms.
+            //
+            // TODO: Actually, I'm not really sure if the advice I was given is correct.
+            // Try adding the following logging just after we call get_batch():
+            //
+            //     println!("xs is_variable={} track_op={}", xs.is_variable(), xs.track_op());
+            //
+            // This will show false for both, which makes sense--we don't _want_ to treat
+            // the input as a variable or track its gradient. Then looking at the implementation
+            // for is_variable(), track_op() and detach(), it's clear that `xs` is just being
+            // cloned when we call detach() and nothing more... I don't think it will actually
+            // disable the tracking of backprop at all. That also means our gradients might get
+            // totally messed up every time we estimate the loss.
             let (xs, ys) = get_batch(&data, rng)?;
             let logits = model.forward(&xs.detach())?;
             let loss = language_loss(&logits, &ys.detach())?;
