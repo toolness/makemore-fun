@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, Device, IndexOp, Tensor};
@@ -6,6 +8,7 @@ use rand::rngs::StdRng;
 
 use crate::{
     BATCH_SIZE, BLOCK_SIZE,
+    tokenizer::Tokenizer,
     util::{assert_equal_tensors, multinomial},
 };
 
@@ -37,6 +40,7 @@ pub fn language_generate(
     num_chars: usize,
     rng: &mut StdRng,
     device: &Device,
+    tokenizer: &Tokenizer,
 ) -> Result<Vec<u32>> {
     let mut result = Vec::with_capacity(num_chars);
     result.push(0);
@@ -48,7 +52,10 @@ pub fn language_generate(
         let logits = logits.i((.., block_slice.len() - 1, ..))?;
         let sm = softmax(&logits, 1)?;
         let token = multinomial(&sm, rng)?;
+        print!("{}", tokenizer.decode(&vec![token])?);
+        io::stdout().flush()?;
         result.push(token);
     }
+    println!("");
     Ok(result)
 }

@@ -290,7 +290,8 @@ fn main() -> Result<()> {
         let end_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
         println!("Total training time: {} ms", end_time - start_time)
     } else {
-        calculate_loss("Model".to_owned(), &mut rng)?;
+        // Don't show this, it takes way too long to calculate at scale when I just want to generate content.
+        // calculate_loss("Model".to_owned(), &mut rng)?;
     }
 
     if let Some(save) = &args.save {
@@ -302,8 +303,7 @@ fn main() -> Result<()> {
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
         let model_no_grad = create_model_no_grad()?;
-        let result = language_generate(&model_no_grad, args.chars, &mut rng, &device)?;
-        println!("{}", tokenizer.decode(&result)?);
+        language_generate(&model_no_grad, args.chars, &mut rng, &device, &tokenizer)?;
     }
 
     Ok(())
