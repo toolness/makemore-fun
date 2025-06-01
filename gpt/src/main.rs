@@ -135,10 +135,19 @@ fn main() -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model: Box<dyn Module> = match args.model {
-        Model::Bigram => Box::new(BigramLanguageModel::new(vocab_size, vb)?),
-        Model::Transformer => Box::new(TransformerLanguageModel::new(args.blocks, vocab_size, vb)?),
+
+    let create_model = |vb: VarBuilder| -> Result<Box<dyn Module>> {
+        match args.model {
+            Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
+            Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
+                args.blocks,
+                vocab_size,
+                vb,
+            )?)),
+        }
     };
+
+    let model = create_model(vb)?;
 
     if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
