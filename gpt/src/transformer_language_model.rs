@@ -2,7 +2,7 @@ use core::f32;
 
 use anyhow::Result;
 use candle_core::{D, DType, IndexOp, Tensor};
-use candle_nn::{Embedding, Linear, Module, Sequential, VarBuilder, ops::softmax};
+use candle_nn::{Dropout, Embedding, Linear, Module, Sequential, VarBuilder, ops::softmax};
 
 use crate::BLOCK_SIZE;
 
@@ -13,6 +13,9 @@ const N_EMBED: usize = 32;
 /// to make sure it works when the variance is zero. This is just
 /// Pytorch's default.
 const LAYER_NORM_EPSILON: f64 = 1e-5;
+
+/// Probability of an element to be zeroed-out.
+const DROPOUT_PROB: f32 = 0.2;
 
 /// We're implementing our own layer norm because Candle's built-in one doesn't
 /// seem to support backprop: https://github.com/huggingface/candle/issues/2977
@@ -53,6 +56,7 @@ struct AttentionHead {
     head_size: usize,
     tril: Tensor,
     neg_infinity: Tensor,
+    dropout: Dropout,
 }
 
 impl AttentionHead {
@@ -61,6 +65,7 @@ impl AttentionHead {
         let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
         let tril = Tensor::tril2(BLOCK_SIZE, DType::U8, vb.device())?;
+        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
 
         // It's annoying that we have to put this in its own tensor, since it's just
         // a matrix full of negative infinity... I wish we could just use a scalar or something.
@@ -73,6 +78,7 @@ impl AttentionHead {
             head_size,
             tril,
             neg_infinity,
+            dropout,
         })
     }
 }
@@ -98,6 +104,7 @@ impl Module for AttentionHead {
                 .broadcast_as((batches, time_steps, time_steps))?,
         )?;
         let wei = softmax(&wei, 2)?;
+        let wei = self.dropout.forward(&wei, xs.track_op())?;
         let out = wei.matmul(&v)?;
         Ok(out)
     }
@@ -106,6 +113,7 @@ impl Module for AttentionHead {
 struct MultiAttentionHead {
     heads: Vec<AttentionHead>,
     proj: Linear,
+    dropout: Dropout,
 }
 
 impl MultiAttentionHead {
@@ -118,7 +126,12 @@ impl MultiAttentionHead {
             )?);
         }
         let proj = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("proj"))?;
-        Ok(Self { heads, proj })
+        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
+        Ok(Self {
+            heads,
+            proj,
+            dropout,
+        })
     }
 }
 
@@ -133,6 +146,7 @@ impl Module for MultiAttentionHead {
         }
         let cat = Tensor::cat(&heads, 2)?;
         let out = self.proj.forward(&cat)?;
+        let out = self.dropout.forward(&out, xs.track_op())?;
         Ok(out)
     }
 }
@@ -140,13 +154,15 @@ impl Module for MultiAttentionHead {
 pub struct FeedForward {
     ff: Linear,
     proj: Linear,
+    dropout: Dropout,
 }
 
 impl FeedForward {
     pub fn new(vb: VarBuilder) -> Result<Self> {
         let ff = candle_nn::linear(N_EMBED, 4 * N_EMBED, vb.pp("ff"))?;
         let proj = candle_nn::linear(4 * N_EMBED, N_EMBED, vb.pp("proj"))?;
-        Ok(Self { ff, proj })
+        let dropout = candle_nn::Dropout::new(DROPOUT_PROB);
+        Ok(Self { ff, proj, dropout })
     }
 }
 
@@ -154,6 +170,7 @@ impl Module for FeedForward {
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
         let out = self.ff.forward(xs)?.relu()?;
         let out = self.proj.forward(&out)?;
+        let out = self.dropout.forward(&out, xs.track_op())?;
         Ok(out)
     }
 }
