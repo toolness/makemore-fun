@@ -10,7 +10,7 @@ use candle_nn::{
 use crate::BLOCK_SIZE;
 
 /// Number of dimensions in embedding space.
-const N_EMBED: usize = 384;
+const N_EMBED: usize = 192;
 
 /// Epsilon for layer norm is what's added to the denominator
 /// to make sure it works when the variance is zero. This is just
