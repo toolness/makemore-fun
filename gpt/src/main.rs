@@ -5,6 +5,7 @@ mod transformer_language_model;
 mod util;
 
 use std::{
+    ops::Deref,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -183,7 +184,24 @@ fn main() -> Result<()> {
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
-        optimizer.backward_step(&loss)?;
+        let gradients = loss.backward()?;
+        if args.vars && i == args.epochs {
+            let data = varmap.data().lock().unwrap();
+            for (name, var) in data.iter() {
+                let tensor = var.deref();
+                if let Some(grad) = gradients.get(tensor) {
+                    let grad_squared = grad.sqr()?;
+                    let grad_norm: f32 = grad_squared.sum_all()?.sqrt()?.to_scalar()?;
+                    println!("gradient norm for {name}: {:.4}", grad_norm);
+                    if grad_norm > 10.0 {
+                        println!("  ⚠️  WARNING: Large gradient!");
+                    } else if grad_norm < 1e-6 {
+                        println!("  ⚠️  WARNING: Vanishing gradient!");
+                    }
+                }
+            }
+        }
+        optimizer.step(&gradients)?;
 
         if i % EVAL_INTERVAL == 0 || i == args.epochs {
             calculate_loss(format!("Epoch {i}"), &mut rng)?;
