@@ -9,6 +9,9 @@ use crate::BLOCK_SIZE;
 /// Number of dimensions in embedding space.
 const N_EMBED: usize = 32;
 
+/// Epsilon for layer norm is what's added to the denominator
+/// to make sure it works when the variance is zero. This is just
+/// Pytorch's default.
 const LAYER_NORM_EPSILON: f64 = 1e-5;
 
 /// We're implementing our own layer norm because Candle's built-in one doesn't
