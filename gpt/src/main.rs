@@ -176,6 +176,14 @@ fn main() -> Result<()> {
             // cloned when we call detach() and nothing more... I don't think it will actually
             // disable the tracking of backprop at all. That also means our gradients might get
             // totally messed up every time we estimate the loss.
+            //
+            // Another way to demonstrate this is by actually using detach() during _training_
+            // and displaying the gradients. If detach() is working, then no gradients should
+            // actually be calculated, but running the CLI with `--vars` indicates that they
+            // _are_ being calculated.
+            //
+            // I think the "real" way to disable backprop calculation is to actually detach
+            // the _variables_, not the inputs.
             let (xs, ys) = get_batch(&data, rng)?;
             let logits = model.forward(&xs.detach())?;
             let loss = language_loss(&logits, &ys.detach())?;
