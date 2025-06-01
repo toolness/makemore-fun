@@ -10,7 +10,7 @@ use candle_nn::{
 use crate::BLOCK_SIZE;
 
 /// Number of dimensions in embedding space.
-const N_EMBED: usize = 32;
+const N_EMBED: usize = 384;
 
 /// Epsilon for layer norm is what's added to the denominator
 /// to make sure it works when the variance is zero. This is just
@@ -255,7 +255,7 @@ impl TransformerLanguageModel {
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
         let mut blocks = candle_nn::seq();
         for i in 0..num_blocks {
-            blocks = blocks.add(Block::new(4, drop_p, vb.pp(format!("block{i}")))?);
+            blocks = blocks.add(Block::new(6, drop_p, vb.pp(format!("block{i}")))?);
         }
         let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;

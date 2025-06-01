@@ -22,13 +22,13 @@ use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
 
 /// Number of examples in each batch.
-const BATCH_SIZE: usize = 32;
+const BATCH_SIZE: usize = 64;
 
 /// Context size, in tokens.
-const BLOCK_SIZE: usize = 8;
+const BLOCK_SIZE: usize = 256;
 
 /// After how many epochs do we evaluate the model again?
-const EVAL_INTERVAL: usize = 300;
+const EVAL_INTERVAL: usize = 500;
 
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
@@ -50,7 +50,7 @@ pub struct Args {
     pub seed: Option<u64>,
 
     /// Number of epochs to train the model.
-    #[arg(long, default_value_t = 3_000)]
+    #[arg(long, default_value_t = 5_000)]
     pub epochs: usize,
 
     /// Number of characters of output to generate.
@@ -65,19 +65,19 @@ pub struct Args {
     #[arg(long)]
     pub load: Option<String>,
 
-    #[arg(long, value_enum, default_value_t = Model::Bigram)]
+    #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
 
     /// Number of self-attention/feed-forward blocks (used only when model is transformer).
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 6)]
     pub blocks: usize,
 
     /// The learning rate.
-    #[arg(long, default_value_t = 0.01)]
+    #[arg(long, default_value_t = 3e-4)]
     pub lr: f64,
 
     /// Dropout probability (used only when model is transformer).
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 0.2)]
     pub dropout: f32,
 }
 
@@ -231,6 +231,7 @@ fn main() -> Result<()> {
         calculate_loss("Initial".to_owned(), &mut rng)?;
     }
     for i in 1..=args.epochs {
+        println!("Running epoch {i}.");
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
