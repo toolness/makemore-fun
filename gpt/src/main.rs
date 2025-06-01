@@ -67,6 +67,10 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = Model::Bigram)]
     pub model: Model,
 
+    /// Number of self-attention/feed-forward blocks (used only when model is transformer).
+    #[arg(long, default_value_t = 1)]
+    pub blocks: usize,
+
     /// The learning rate.
     #[arg(long, default_value_t = 0.01)]
     pub lr: f64,
@@ -133,7 +137,7 @@ fn main() -> Result<()> {
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model: Box<dyn Module> = match args.model {
         Model::Bigram => Box::new(BigramLanguageModel::new(vocab_size, vb)?),
-        Model::Transformer => Box::new(TransformerLanguageModel::new(vocab_size, vb)?),
+        Model::Transformer => Box::new(TransformerLanguageModel::new(args.blocks, vocab_size, vb)?),
     };
 
     if let Some(load) = &args.load {

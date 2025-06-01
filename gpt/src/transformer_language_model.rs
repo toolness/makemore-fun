@@ -185,14 +185,6 @@ impl Module for Block {
     }
 }
 
-fn blocks(blocks: Vec<Block>) -> Sequential {
-    let mut seq = candle_nn::seq();
-    for block in blocks {
-        seq = seq.add(block);
-    }
-    seq
-}
-
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
@@ -203,26 +195,17 @@ pub struct TransformerLanguageModel {
 }
 
 impl TransformerLanguageModel {
-    pub fn new(vocab_size: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(num_blocks: usize, vocab_size: usize, vb: VarBuilder) -> Result<Self> {
         let device = vb.device();
         let token_embedding_table =
             candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;
         let position_embedding_table =
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
-        let blocks = blocks(vec![
-            Block::new(4, vb.pp("block0"))?,
-            // TODO: These extra blocks don't actually seem to improve things; given the same
-            // number of epochs, performance actually *regresses*, and even doubling the number
-            // of epochs for this multi-block version doesn't match the loss of the single-block
-            // version. This is very strange, because in Karpathy's video the performance improves:
-            //
-            //   https://youtu.be/kCc8FmEb1nY?si=YHhf6gihGsdACYaz&t=5540
-            //
-            // So for now I'm just commenting out the extra blocks.
-            //Block::new(4, vb.pp("block1"))?,
-            //Block::new(4, vb.pp("block2"))?,
-        ]);
+        let mut blocks = candle_nn::seq();
+        for i in 0..num_blocks {
+            blocks = blocks.add(Block::new(4, vb.pp(format!("block{i}")))?);
+        }
         let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
