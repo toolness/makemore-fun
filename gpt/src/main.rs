@@ -16,6 +16,7 @@ use bigram_language_model::BigramLanguageModel;
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use language_model::{language_generate, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
@@ -25,7 +26,7 @@ use transformer_language_model::TransformerLanguageModel;
 const BATCH_SIZE: usize = 64;
 
 /// Context size, in tokens.
-const BLOCK_SIZE: usize = 256;
+const BLOCK_SIZE: usize = 128;
 
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 500;
@@ -91,6 +92,7 @@ fn get_tiny_shakespeare() -> Result<String> {
 ///
 ///     https://youtu.be/kCc8FmEb1nY
 fn main() -> Result<()> {
+    let multi_progress = MultiProgress::new();
     let args = Args::parse();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let seed = args.seed.unwrap_or(timestamp);
@@ -186,9 +188,18 @@ fn main() -> Result<()> {
         create_model(VarBuilder::from_tensors(detached_vars, DType::F32, &device))
     };
 
-    let estimate_loss = |data: &Tensor, rng: &mut StdRng| -> Result<f32> {
+    let estimate_loss = |name: &str, data: &Tensor, rng: &mut StdRng| -> Result<f32> {
         let mut losses = Vec::with_capacity(EVAL_ITERS);
         let model_no_grad = create_model_no_grad()?;
+        let bar = multi_progress.add(ProgressBar::new(EVAL_ITERS as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {bar:40.white/white} {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("##-"),
+        );
+        bar.set_message(format!("Evaluating {name}"));
         for _ in 0..EVAL_ITERS {
             // I asked on HF Discord and someone said the analog of torch.no_grad
             // is calling .detach() on inputs, but I'm not really sure if the advice I was
@@ -214,24 +225,37 @@ fn main() -> Result<()> {
             let logits = model_no_grad.forward(&xs)?;
             let loss = language_loss(&logits, &ys)?;
             losses.push(loss.to_scalar()?);
+            bar.inc(1);
         }
-        Ok(losses.iter().sum::<f32>() / losses.len() as f32)
+        let loss = losses.iter().sum::<f32>() / losses.len() as f32;
+        //bar.finish_with_message(format!("{name} is {loss:.4}"));
+        bar.finish_and_clear();
+        Ok(loss)
     };
 
     let calculate_loss = |prefix: String, rng: &mut StdRng| -> Result<()> {
-        let train_loss = estimate_loss(&train_data, rng)?;
-        let val_loss = estimate_loss(&val_data, rng)?;
+        let train_loss = estimate_loss("training loss", &train_data, rng)?;
+        let val_loss = estimate_loss("evaluation loss", &val_data, rng)?;
         println!("{prefix} train loss {train_loss:.4}, val loss {val_loss:.4}",);
         Ok(())
     };
 
     let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
 
+    let main_pb = multi_progress.add(ProgressBar::new(args.epochs as u64));
+    main_pb.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap()
+        .progress_chars("##-"),
+    );
+
     if args.epochs > 0 {
         calculate_loss("Initial".to_owned(), &mut rng)?;
     }
     for i in 1..=args.epochs {
-        println!("Running epoch {i}.");
+        main_pb.set_message("Training network");
         let (xs, ys) = get_batch(&train_data, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
@@ -255,6 +279,7 @@ fn main() -> Result<()> {
             }
         }
         optimizer.step(&gradients)?;
+        main_pb.inc(1);
 
         if i % EVAL_INTERVAL == 0 || i == args.epochs {
             calculate_loss(format!("Epoch {i}"), &mut rng)?;
