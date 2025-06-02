@@ -17,7 +17,7 @@ use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use language_model::{language_generate, language_loss};
+use language_model::{language_generate_and_print, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
@@ -303,7 +303,7 @@ fn main() -> Result<()> {
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
         let model_no_grad = create_model_no_grad()?;
-        language_generate(
+        language_generate_and_print(
             &model_no_grad,
             BLOCK_SIZE,
             args.chars,

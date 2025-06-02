@@ -33,7 +33,7 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     Ok(loss)
 }
 
-pub fn language_generate(
+pub fn language_generate_and_print(
     model: &Box<dyn Module>,
     block_size: usize,
     num_chars: usize,
