@@ -7,8 +7,6 @@ use candle_nn::{
     ops::{dropout, softmax},
 };
 
-use crate::BLOCK_SIZE;
-
 /// Number of dimensions in embedding space.
 const N_EMBED: usize = 32;
 
@@ -93,11 +91,11 @@ struct AttentionHead {
 }
 
 impl AttentionHead {
-    pub fn new(head_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+    pub fn new(block_size: usize, head_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let key = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("key"))?;
         let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
         let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
-        let tril = Tensor::tril2(BLOCK_SIZE, DType::U8, vb.device())?;
+        let tril = Tensor::tril2(block_size, DType::U8, vb.device())?;
         let dropout = Dropout::new(drop_p);
 
         // It's annoying that we have to put this in its own tensor, since it's just
@@ -150,10 +148,11 @@ struct MultiAttentionHead {
 }
 
 impl MultiAttentionHead {
-    pub fn new(num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+    pub fn new(block_size: usize, num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let mut heads = Vec::with_capacity(num_heads);
         for i in 0..num_heads {
             heads.push(AttentionHead::new(
+                block_size,
                 N_EMBED / num_heads,
                 drop_p,
                 vb.pp(format!("head_{i}")),
@@ -217,8 +216,8 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
-        let sa_heads = MultiAttentionHead::new(num_heads, drop_p, vb.pp("sa_heads"))?;
+    pub fn new(block_size: usize, num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+        let sa_heads = MultiAttentionHead::new(block_size, num_heads, drop_p, vb.pp("sa_heads"))?;
         let ln1 = LayerNorm::new(vb.pp("layer_norm1"))?;
         let feed_forward = FeedForward::new(drop_p, vb.pp("feed_forward"))?;
         let ln2 = LayerNorm::new(vb.pp("layer_norm2"))?;
@@ -249,16 +248,27 @@ pub struct TransformerLanguageModel {
 }
 
 impl TransformerLanguageModel {
-    pub fn new(num_layers: usize, vocab_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+    pub fn new(
+        block_size: usize,
+        num_layers: usize,
+        vocab_size: usize,
+        drop_p: f32,
+        vb: VarBuilder,
+    ) -> Result<Self> {
         let device = vb.device();
         let token_embedding_table =
             candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;
         let position_embedding_table =
-            candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
-        let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
+            candle_nn::embedding(block_size, N_EMBED, vb.pp("position_embedding_table"))?;
+        let positions = Tensor::arange(0 as u32, block_size as u32, device)?;
         let mut blocks = candle_nn::seq();
         for i in 0..num_layers {
-            blocks = blocks.add(Block::new(NUM_HEADS, drop_p, vb.pp(format!("block{i}")))?);
+            blocks = blocks.add(Block::new(
+                block_size,
+                NUM_HEADS,
+                drop_p,
+                vb.pp(format!("block{i}")),
+            )?);
         }
         let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;

@@ -22,9 +22,6 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
 
-/// Context size, in tokens.
-const BLOCK_SIZE: usize = 8;
-
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 300;
 
@@ -50,6 +47,10 @@ pub struct Args {
     /// Number of epochs to train the model.
     #[arg(long, default_value_t = 3_000)]
     pub epochs: usize,
+
+    /// Context window size, measured in characters.
+    #[arg(long, default_value_t = 8)]
+    pub block_size: usize,
 
     /// Number of characters of output to generate.
     #[arg(long, default_value_t = 500)]
@@ -129,9 +130,9 @@ fn main() -> Result<()> {
             // Ideally we'd use candle for these random numbers, but as far as I can tell,
             // it can only generate random floats. I guess we could round/cast them to
             // integers but for now I'm just going to use the rand crate instead.
-            let idx: usize = rng.random_range(0..(data_len - BLOCK_SIZE));
-            x.push(data.i(idx..(BLOCK_SIZE + idx))?);
-            y.push(data.i((idx + 1)..(BLOCK_SIZE + idx + 1))?);
+            let idx: usize = rng.random_range(0..(data_len - args.block_size));
+            x.push(data.i(idx..(args.block_size + idx))?);
+            y.push(data.i((idx + 1)..(args.block_size + idx + 1))?);
         }
         Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
     };
@@ -146,6 +147,7 @@ fn main() -> Result<()> {
         match args.model {
             Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
             Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
+                args.block_size,
                 args.layers,
                 vocab_size,
                 args.dropout,
@@ -303,7 +305,7 @@ fn main() -> Result<()> {
         let model_no_grad = create_model_no_grad()?;
         language_generate_and_print(
             &model_no_grad,
-            BLOCK_SIZE,
+            args.block_size,
             args.chars,
             &mut rng,
             &device,
