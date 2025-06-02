@@ -74,9 +74,9 @@ pub struct Args {
     #[arg(long, default_value_t = 32)]
     pub batch_size: usize,
 
-    /// Number of self-attention/feed-forward blocks (used only when model is transformer).
+    /// Number of self-attention/feed-forward layers (used only when model is transformer).
     #[arg(long, default_value_t = 1)]
-    pub blocks: usize,
+    pub layers: usize,
 
     /// The learning rate.
     #[arg(long, default_value_t = 0.01)]
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
         match args.model {
             Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
             Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
-                args.blocks,
+                args.layers,
                 vocab_size,
                 args.dropout,
                 vb,

@@ -249,7 +249,7 @@ pub struct TransformerLanguageModel {
 }
 
 impl TransformerLanguageModel {
-    pub fn new(num_blocks: usize, vocab_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+    pub fn new(num_layers: usize, vocab_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
         let device = vb.device();
         let token_embedding_table =
             candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;
@@ -257,7 +257,7 @@ impl TransformerLanguageModel {
             candle_nn::embedding(BLOCK_SIZE, N_EMBED, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, BLOCK_SIZE as u32, device)?;
         let mut blocks = candle_nn::seq();
-        for i in 0..num_blocks {
+        for i in 0..num_layers {
             blocks = blocks.add(Block::new(NUM_HEADS, drop_p, vb.pp(format!("block{i}")))?);
         }
         let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
