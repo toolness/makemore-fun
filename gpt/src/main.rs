@@ -83,6 +83,10 @@ pub struct Args {
     #[arg(long, default_value_t = 4)]
     pub heads: usize,
 
+    /// Number of dimensions in embedding space (transformer model only).
+    #[arg(long, default_value_t = 32)]
+    pub embedding_dims: usize,
+
     /// Dropout probability (transformer model only).
     #[arg(long, default_value_t = 0.0)]
     pub dropout: f32,
@@ -151,6 +155,7 @@ fn main() -> Result<()> {
         match args.model {
             Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
             Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
+                args.embedding_dims,
                 args.block_size,
                 args.layers,
                 args.heads,

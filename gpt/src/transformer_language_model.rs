@@ -1,19 +1,19 @@
 use core::f32;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use candle_core::{D, DType, IndexOp, Tensor};
 use candle_nn::{
     Embedding, Linear, Module, Sequential, VarBuilder,
     ops::{dropout, softmax},
 };
 
-/// Number of dimensions in embedding space.
-const N_EMBED: usize = 32;
-
 /// Epsilon for layer norm is what's added to the denominator
 /// to make sure it works when the variance is zero. This is just
 /// Pytorch's default.
 const LAYER_NORM_EPSILON: f64 = 1e-5;
+
+/// Number of output dimensions in the feed-forward layer.
+const FEED_FORWARD_OUTPUT_DIMS: usize = 4;
 
 /// This is similar to candle_nn::Dropout with a few salient differences:
 ///
@@ -53,9 +53,9 @@ struct LayerNorm {
 }
 
 impl LayerNorm {
-    fn new(vb: VarBuilder) -> Result<Self> {
-        let weight = vb.get_with_hints(N_EMBED, "weight", candle_nn::init::ONE)?;
-        let bias = vb.get_with_hints(N_EMBED, "bias", candle_nn::init::ZERO)?;
+    fn new(n_embed: usize, vb: VarBuilder) -> Result<Self> {
+        let weight = vb.get_with_hints(n_embed, "weight", candle_nn::init::ONE)?;
+        let bias = vb.get_with_hints(n_embed, "bias", candle_nn::init::ZERO)?;
         Ok(LayerNorm { weight, bias })
     }
 }
@@ -88,10 +88,16 @@ struct AttentionHead {
 }
 
 impl AttentionHead {
-    pub fn new(block_size: usize, head_size: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
-        let key = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("key"))?;
-        let query = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("query"))?;
-        let value = candle_nn::linear_no_bias(N_EMBED, head_size, vb.pp("value"))?;
+    pub fn new(
+        n_embed: usize,
+        block_size: usize,
+        head_size: usize,
+        drop_p: f32,
+        vb: VarBuilder,
+    ) -> Result<Self> {
+        let key = candle_nn::linear_no_bias(n_embed, head_size, vb.pp("key"))?;
+        let query = candle_nn::linear_no_bias(n_embed, head_size, vb.pp("query"))?;
+        let value = candle_nn::linear_no_bias(n_embed, head_size, vb.pp("value"))?;
         let tril = Tensor::tril2(block_size, DType::U8, vb.device())?;
         let dropout = Dropout::new(drop_p);
 
@@ -145,17 +151,24 @@ struct MultiAttentionHead {
 }
 
 impl MultiAttentionHead {
-    pub fn new(block_size: usize, num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+    pub fn new(
+        n_embed: usize,
+        block_size: usize,
+        num_heads: usize,
+        drop_p: f32,
+        vb: VarBuilder,
+    ) -> Result<Self> {
         let mut heads = Vec::with_capacity(num_heads);
         for i in 0..num_heads {
             heads.push(AttentionHead::new(
+                n_embed,
                 block_size,
-                N_EMBED / num_heads,
+                n_embed / num_heads,
                 drop_p,
                 vb.pp(format!("head_{i}")),
             )?);
         }
-        let proj = candle_nn::linear(N_EMBED, N_EMBED, vb.pp("proj"))?;
+        let proj = candle_nn::linear(n_embed, n_embed, vb.pp("proj"))?;
         let dropout = Dropout::new(drop_p);
         Ok(Self {
             heads,
@@ -188,9 +201,9 @@ pub struct FeedForward {
 }
 
 impl FeedForward {
-    pub fn new(drop_p: f32, vb: VarBuilder) -> Result<Self> {
-        let ff = candle_nn::linear(N_EMBED, 4 * N_EMBED, vb.pp("ff"))?;
-        let proj = candle_nn::linear(4 * N_EMBED, N_EMBED, vb.pp("proj"))?;
+    pub fn new(n_embed: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
+        let ff = candle_nn::linear(n_embed, FEED_FORWARD_OUTPUT_DIMS * n_embed, vb.pp("ff"))?;
+        let proj = candle_nn::linear(FEED_FORWARD_OUTPUT_DIMS * n_embed, n_embed, vb.pp("proj"))?;
         let dropout = Dropout::new(drop_p);
         Ok(Self { ff, proj, dropout })
     }
@@ -213,11 +226,18 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(block_size: usize, num_heads: usize, drop_p: f32, vb: VarBuilder) -> Result<Self> {
-        let sa_heads = MultiAttentionHead::new(block_size, num_heads, drop_p, vb.pp("sa_heads"))?;
-        let ln1 = LayerNorm::new(vb.pp("layer_norm1"))?;
-        let feed_forward = FeedForward::new(drop_p, vb.pp("feed_forward"))?;
-        let ln2 = LayerNorm::new(vb.pp("layer_norm2"))?;
+    pub fn new(
+        n_embed: usize,
+        block_size: usize,
+        num_heads: usize,
+        drop_p: f32,
+        vb: VarBuilder,
+    ) -> Result<Self> {
+        let sa_heads =
+            MultiAttentionHead::new(n_embed, block_size, num_heads, drop_p, vb.pp("sa_heads"))?;
+        let ln1 = LayerNorm::new(n_embed, vb.pp("layer_norm1"))?;
+        let feed_forward = FeedForward::new(n_embed, drop_p, vb.pp("feed_forward"))?;
+        let ln2 = LayerNorm::new(n_embed, vb.pp("layer_norm2"))?;
         Ok(Self {
             sa_heads,
             feed_forward,
@@ -246,6 +266,7 @@ pub struct TransformerLanguageModel {
 
 impl TransformerLanguageModel {
     pub fn new(
+        n_embed: usize,
         block_size: usize,
         num_layers: usize,
         num_heads: usize,
@@ -253,23 +274,33 @@ impl TransformerLanguageModel {
         drop_p: f32,
         vb: VarBuilder,
     ) -> Result<Self> {
+        if num_heads <= 0 {
+            return Err(anyhow!("must have a positive number of attention heads!"));
+        }
+        if n_embed as f64 / num_heads as f64 != (n_embed / num_heads) as f64 {
+            return Err(anyhow!(
+                "embedding dimensions ({n_embed}) must be divisible by attention heads ({num_heads})!",
+            ));
+        }
+
         let device = vb.device();
         let token_embedding_table =
-            candle_nn::embedding(vocab_size, N_EMBED, vb.pp("token_embedding_table"))?;
+            candle_nn::embedding(vocab_size, n_embed, vb.pp("token_embedding_table"))?;
         let position_embedding_table =
-            candle_nn::embedding(block_size, N_EMBED, vb.pp("position_embedding_table"))?;
+            candle_nn::embedding(block_size, n_embed, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, block_size as u32, device)?;
         let mut blocks = candle_nn::seq();
         for i in 0..num_layers {
             blocks = blocks.add(Block::new(
+                n_embed,
                 block_size,
                 num_heads,
                 drop_p,
                 vb.pp(format!("block{i}")),
             )?);
         }
-        let layer_norm = LayerNorm::new(vb.pp("layer_norm"))?;
-        let language_head = candle_nn::linear(N_EMBED, vocab_size, vb.pp("language_head"))?;
+        let layer_norm = LayerNorm::new(n_embed, vb.pp("layer_norm"))?;
+        let language_head = candle_nn::linear(n_embed, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
             token_embedding_table,
             position_embedding_table,
