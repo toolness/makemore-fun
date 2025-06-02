@@ -15,9 +15,6 @@ const N_EMBED: usize = 32;
 /// Pytorch's default.
 const LAYER_NORM_EPSILON: f64 = 1e-5;
 
-/// Number of attention heads per layer.
-const NUM_HEADS: usize = 4;
-
 /// This is similar to candle_nn::Dropout with a few salient differences:
 ///
 ///   * Instead of implementing `ModuleT`, it detects whether
@@ -251,6 +248,7 @@ impl TransformerLanguageModel {
     pub fn new(
         block_size: usize,
         num_layers: usize,
+        num_heads: usize,
         vocab_size: usize,
         drop_p: f32,
         vb: VarBuilder,
@@ -265,7 +263,7 @@ impl TransformerLanguageModel {
         for i in 0..num_layers {
             blocks = blocks.add(Block::new(
                 block_size,
-                NUM_HEADS,
+                num_heads,
                 drop_p,
                 vb.pp(format!("block{i}")),
             )?);

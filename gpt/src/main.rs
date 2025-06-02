@@ -75,17 +75,21 @@ pub struct Args {
     #[arg(long, default_value_t = 32)]
     pub batch_size: usize,
 
-    /// Number of self-attention/feed-forward layers (used only when model is transformer).
+    /// Number of self-attention/feed-forward layers (transformer model only).
     #[arg(long, default_value_t = 1)]
     pub layers: usize,
+
+    /// Number of attention heads per layer (transformer model only).
+    #[arg(long, default_value_t = 4)]
+    pub heads: usize,
+
+    /// Dropout probability (transformer model only).
+    #[arg(long, default_value_t = 0.0)]
+    pub dropout: f32,
 
     /// The learning rate.
     #[arg(long, default_value_t = 0.01)]
     pub lr: f64,
-
-    /// Dropout probability (used only when model is transformer).
-    #[arg(long, default_value_t = 0.0)]
-    pub dropout: f32,
 }
 
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
@@ -149,6 +153,7 @@ fn main() -> Result<()> {
             Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
                 args.block_size,
                 args.layers,
+                args.heads,
                 vocab_size,
                 args.dropout,
                 vb,
