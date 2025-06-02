@@ -169,6 +169,11 @@ fn main() -> Result<()> {
             // Ideally we'd use candle for these random numbers, but as far as I can tell,
             // it can only generate random floats. I guess we could round/cast them to
             // integers but for now I'm just going to use the rand crate instead.
+            //
+            // Also, I think this might be doing a lot of back-and-forth between GPU and CPU.
+            // If we can use Candle for all of this, and only use Tensors, rather than pulling
+            // from the data Tensor into a Vec and then converting it back into a Tensor,
+            // this might be able to run faster on GPUs.
             let idx: usize = rng.random_range(0..(data_len - args.block_size));
             x.push(data.i(idx..(args.block_size + idx))?);
             y.push(data.i((idx + 1)..(args.block_size + idx + 1))?);
