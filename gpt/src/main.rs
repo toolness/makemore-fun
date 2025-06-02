@@ -6,14 +6,15 @@ mod util;
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     ops::Deref,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use bigram_language_model::BigramLanguageModel;
-use candle_core::{DType, Device, IndexOp, Tensor};
+use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -32,6 +33,21 @@ const EVAL_ITERS: usize = 200;
 pub enum Model {
     Bigram,
     Transformer,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Device {
+    Cpu,
+    Cuda,
+}
+
+impl Display for Device {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Device::Cpu => write!(f, "CPU"),
+            Device::Cuda => write!(f, "CUDA"),
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -67,6 +83,9 @@ pub struct Args {
     /// The file to load the trained weights from, in safetensors format.
     #[arg(long)]
     pub load: Option<String>,
+
+    #[arg(long, value_enum, default_value_t = Device::Cpu)]
+    pub device: Device,
 
     #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
@@ -105,7 +124,19 @@ fn main() -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let seed = args.seed.unwrap_or(timestamp);
     let mut rng = StdRng::seed_from_u64(seed);
-    let device = Device::Cpu;
+    let device: candle_core::Device = match args.device {
+        Device::Cpu => candle_core::Device::Cpu,
+        Device::Cuda => {
+            if cfg!(feature = "cuda") {
+                candle_core::Device::new_cuda(0)?
+            } else {
+                return Err(anyhow!(
+                    "CUDA is not supported in this build, you need to compile with the 'cuda' feature!"
+                ));
+            }
+        }
+    };
+    println!("Using {} for training/inference.", args.device);
 
     let training_corpus = std::fs::read_to_string(args.corpus)?;
     let tokenizer = Tokenizer::from_string(&training_corpus)?;
