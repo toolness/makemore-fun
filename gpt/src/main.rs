@@ -216,6 +216,13 @@ fn main() -> Result<()> {
     };
     let mut optimizer = AdamW::new(varmap.all_vars(), params)?;
 
+    let num_params: usize = varmap
+        .all_vars()
+        .iter()
+        .map(|var| var.as_tensor().elem_count())
+        .sum();
+    println!("Parameters in model: {}", num_params);
+
     if args.vars {
         let data = varmap.data().lock().unwrap();
         println!("varmap vars: {:#?}", data);
