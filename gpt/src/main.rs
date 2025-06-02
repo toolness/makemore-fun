@@ -55,6 +55,10 @@ pub struct Args {
     #[arg(long, default_value_t = 500)]
     pub chars: usize,
 
+    /// The text file to use as a training corpus.
+    #[arg(long, default_value_t = String::from("tiny-shakespeare.txt"))]
+    pub corpus: String,
+
     /// The file to save the trained weights to, in safetensors format.
     #[arg(long)]
     pub save: Option<String>,
@@ -83,12 +87,6 @@ pub struct Args {
     pub dropout: f32,
 }
 
-fn get_tiny_shakespeare() -> Result<String> {
-    // https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-    let content = std::fs::read_to_string("tiny-shakespeare.txt")?;
-    Ok(content)
-}
-
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
 ///
 ///     https://youtu.be/kCc8FmEb1nY
@@ -100,8 +98,8 @@ fn main() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(seed);
     let device = Device::Cpu;
 
-    let tiny_shakespeare = get_tiny_shakespeare()?;
-    let tokenizer = Tokenizer::from_string(&tiny_shakespeare)?;
+    let training_corpus = std::fs::read_to_string(args.corpus)?;
+    let tokenizer = Tokenizer::from_string(&training_corpus)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
 
@@ -113,7 +111,7 @@ fn main() -> Result<()> {
         );
     }
 
-    let data = Tensor::new(tokenizer.encode(&tiny_shakespeare)?, &device)?;
+    let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
     let data_len = data.shape().dim(0)?;
 
     println!("Data is {} tokens.", data_len);
