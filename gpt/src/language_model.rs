@@ -7,14 +7,13 @@ use candle_nn::{Module, loss::cross_entropy, ops::softmax};
 use rand::rngs::StdRng;
 
 use crate::{
-    BATCH_SIZE, BLOCK_SIZE,
     tokenizer::Tokenizer,
     util::{assert_equal_tensors, multinomial},
 };
 
 pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
-    let vocab_size = logits.dims3()?.2;
-    assert_eq!(logits.dims3()?, (BATCH_SIZE, BLOCK_SIZE, vocab_size));
+    let (batch_size, block_size, vocab_size) = logits.dims3()?;
+    assert_eq!(logits.dims3()?, (batch_size, block_size, vocab_size));
 
     if cfg!(debug_assertions) {
         let sm = softmax(&logits, D::Minus1)?;
@@ -25,8 +24,8 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
         );
     }
 
-    let flat_logits = logits.reshape((BATCH_SIZE * BLOCK_SIZE, vocab_size))?;
-    let flat_ys = ys.reshape(BATCH_SIZE * BLOCK_SIZE)?;
+    let flat_logits = logits.reshape((batch_size * block_size, vocab_size))?;
+    let flat_ys = ys.reshape(batch_size * block_size)?;
 
     if cfg!(debug_assertions) {
         assert_equal_tensors(logits.get(0)?.get(0)?, flat_logits.get(0)?)?;
@@ -37,6 +36,7 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
 
 pub fn language_generate(
     model: &Box<dyn Module>,
+    block_size: usize,
     num_chars: usize,
     rng: &mut StdRng,
     device: &Device,
@@ -45,7 +45,7 @@ pub fn language_generate(
     let mut result = Vec::with_capacity(num_chars);
     result.push(0);
     for _ in 0..num_chars {
-        let block_slice = &result[result.len().saturating_sub(BLOCK_SIZE)..];
+        let block_slice = &result[result.len().saturating_sub(block_size)..];
         let block = Tensor::from_slice(block_slice, (1, block_slice.len()), device)?;
         let logits = model.forward(&block)?;
         // Take just the logits for the final time step.

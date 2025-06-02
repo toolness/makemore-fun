@@ -22,9 +22,6 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
 
-/// Number of examples in each batch.
-const BATCH_SIZE: usize = 32;
-
 /// Context size, in tokens.
 const BLOCK_SIZE: usize = 8;
 
@@ -68,6 +65,10 @@ pub struct Args {
 
     #[arg(long, value_enum, default_value_t = Model::Bigram)]
     pub model: Model,
+
+    /// Number of training examples per batch.
+    #[arg(long, default_value_t = 32)]
+    pub batch_size: usize,
 
     /// Number of self-attention/feed-forward blocks (used only when model is transformer).
     #[arg(long, default_value_t = 1)]
@@ -123,10 +124,10 @@ fn main() -> Result<()> {
     println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
 
     let get_batch = |data: &Tensor, rng: &mut StdRng| -> Result<(Tensor, Tensor)> {
-        let mut x = Vec::with_capacity(BATCH_SIZE);
-        let mut y = Vec::with_capacity(BATCH_SIZE);
+        let mut x = Vec::with_capacity(args.batch_size);
+        let mut y = Vec::with_capacity(args.batch_size);
         let data_len = data.shape().dim(0)?;
-        for _ in 0..BATCH_SIZE {
+        for _ in 0..args.batch_size {
             // Ideally we'd use candle for these random numbers, but as far as I can tell,
             // it can only generate random floats. I guess we could round/cast them to
             // integers but for now I'm just going to use the rand crate instead.
@@ -302,7 +303,14 @@ fn main() -> Result<()> {
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
         let model_no_grad = create_model_no_grad()?;
-        language_generate(&model_no_grad, args.chars, &mut rng, &device, &tokenizer)?;
+        language_generate(
+            &model_no_grad,
+            BLOCK_SIZE,
+            args.chars,
+            &mut rng,
+            &device,
+            &tokenizer,
+        )?;
     }
 
     Ok(())
