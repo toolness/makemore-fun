@@ -68,7 +68,7 @@ pub struct Args {
     #[arg(long)]
     pub load: Option<String>,
 
-    #[arg(long, value_enum, default_value_t = Model::Bigram)]
+    #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
 
     /// Number of training examples per batch.
