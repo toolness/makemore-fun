@@ -23,7 +23,7 @@ use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
 
 /// After how many epochs do we evaluate the model again?
-const EVAL_INTERVAL: usize = 300;
+const EVAL_INTERVAL: usize = 500;
 
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
