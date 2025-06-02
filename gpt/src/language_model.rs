@@ -13,7 +13,6 @@ use crate::{
 
 pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     let (batch_size, block_size, vocab_size) = logits.dims3()?;
-    assert_eq!(logits.dims3()?, (batch_size, block_size, vocab_size));
 
     if cfg!(debug_assertions) {
         let sm = softmax(&logits, D::Minus1)?;
