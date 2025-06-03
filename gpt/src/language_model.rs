@@ -35,6 +35,7 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
 
 pub fn language_generate_and_print(
     context: &Vec<u32>,
+    temperature: f32,
     model: &Box<dyn Module>,
     block_size: usize,
     num_chars: usize,
@@ -50,8 +51,15 @@ pub fn language_generate_and_print(
         let logits = model.forward(&block)?;
         // Take just the logits for the final time step.
         let logits = logits.i((.., block_slice.len() - 1, ..))?;
-        let sm = softmax(&logits, 1)?;
-        let token = multinomial(&sm, rng)?;
+        let token = if temperature == 0.0 {
+            logits.argmax(1)?.get(0)?.to_scalar()?
+        } else {
+            // It's very weird that I can't just use the division operator here.
+            let logits =
+                logits.broadcast_div(&Tensor::from_slice(&[temperature], (1,), device)?)?;
+            let sm = softmax(&logits, 1)?;
+            multinomial(&sm, rng)?
+        };
         print!("{}", tokenizer.decode(&vec![token])?);
         io::stdout().flush()?;
         result.push(token);

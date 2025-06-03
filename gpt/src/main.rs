@@ -203,6 +203,7 @@ fn main() -> Result<()> {
         print!("{}", args.context);
         language_generate_and_print(
             &context,
+            args.temperature,
             &model_no_grad,
             args.block_size,
             args.chars,

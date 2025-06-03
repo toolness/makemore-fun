@@ -36,6 +36,10 @@ pub struct Args {
     #[arg(long, default_value_t = 500)]
     pub chars: usize,
 
+    /// Temperature to use when generating content.
+    #[arg(long, default_value_t = 1.0)]
+    pub temperature: f32,
+
     /// The text file to use as a training corpus.
     #[arg(long, default_value_t = String::from("tiny-shakespeare.txt"))]
     pub corpus: String,
