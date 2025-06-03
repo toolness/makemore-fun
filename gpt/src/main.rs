@@ -291,9 +291,6 @@ fn main() -> Result<()> {
     if args.epochs > 0 {
         let end_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
         println!("Total training time: {} ms", end_time - start_time)
-    } else {
-        // Don't show this, it takes way too long to calculate at scale when I just want to generate content.
-        // calculate_loss("Model".to_owned(), &mut rng)?;
     }
 
     if let Some(save) = &args.save {
