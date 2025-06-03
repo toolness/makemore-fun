@@ -39,6 +39,7 @@ pub enum Model {
 pub enum Device {
     Cpu,
     Cuda,
+    Metal,
 }
 
 impl Display for Device {
@@ -46,6 +47,7 @@ impl Display for Device {
         match self {
             Device::Cpu => write!(f, "CPU"),
             Device::Cuda => write!(f, "CUDA"),
+            Device::Metal => write!(f, "Metal"),
         }
     }
 }
@@ -132,6 +134,15 @@ fn main() -> Result<()> {
             } else {
                 return Err(anyhow!(
                     "CUDA is not supported in this build, you need to compile with the 'cuda' feature!"
+                ));
+            }
+        }
+        Device::Metal => {
+            if cfg!(feature = "metal") {
+                candle_core::Device::new_metal(0)?
+            } else {
+                return Err(anyhow!(
+                    "Metal is not supported in this build, you need to compile with the 'metal' feature!"
                 ));
             }
         }

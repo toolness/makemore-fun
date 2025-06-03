@@ -20,3 +20,7 @@ cuda = [
     "candle-nn/cuda",
     "candle-optimisers/cuda"
 ]
+metal = [
+    "candle-core/metal",
+    "candle-nn/metal"
+]
