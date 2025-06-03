@@ -154,14 +154,6 @@ fn main() -> Result<()> {
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
 
-    if cfg!(debug_assertions) {
-        println!("encoded 'hii there': {:?}", tokenizer.encode("hii there")?);
-        println!(
-            "decoded 'hii there': {:?}",
-            tokenizer.decode(&tokenizer.encode("hii there")?)?
-        );
-    }
-
     let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
     let data_len = data.shape().dim(0)?;
 
