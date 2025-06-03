@@ -16,13 +16,12 @@ use rand::{
 pub fn multinomial(tensor: &Tensor, rng: &mut StdRng) -> Result<u32> {
     let vec: Vec<f32> = tensor.get(0)?.to_vec1()?;
     let mut choices: Vec<u32> = Vec::with_capacity(vec.len());
-    let mut weights: Vec<u32> = Vec::with_capacity(vec.len());
+    let mut weights: Vec<f32> = Vec::with_capacity(vec.len());
 
-    for (i, prob) in vec.iter().enumerate() {
-        let weight = (prob * 100.0) as u32;
-        if weight > 0 {
+    for (i, &prob) in vec.iter().enumerate() {
+        if prob > 0.0 {
             choices.push(i as u32);
-            weights.push(weight);
+            weights.push(prob);
         }
     }
 
