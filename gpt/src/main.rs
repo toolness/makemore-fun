@@ -7,7 +7,6 @@ mod util;
 
 use std::{
     collections::HashMap,
-    ops::Deref,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -23,7 +22,7 @@ use language_model::{language_generate_and_print, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
-use util::count_params;
+use util::{count_params, print_gradient_info};
 
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 500;
@@ -279,22 +278,7 @@ fn main() -> Result<()> {
         let loss = language_loss(&logits, &ys)?;
         let gradients = loss.backward()?;
         if args.vars && i == args.epochs {
-            let data = varmap.data().lock().unwrap();
-            for (name, var) in data.iter() {
-                let tensor = var.deref();
-                if let Some(grad) = gradients.get(tensor) {
-                    let grad_squared = grad.sqr()?;
-                    let grad_norm: f32 = grad_squared.sum_all()?.sqrt()?.to_scalar()?;
-                    println!("gradient norm for {name}: {:.4}", grad_norm);
-                    if grad_norm > 10.0 {
-                        println!("  ⚠️  WARNING: Large gradient!");
-                    } else if grad_norm < 1e-6 {
-                        println!("  ⚠️  WARNING: Vanishing gradient!");
-                    }
-                } else {
-                    println!("⚠️  WARNING: No gradient for {name}!");
-                }
-            }
+            print_gradient_info(&varmap, &gradients)?;
         }
         optimizer.step(&gradients)?;
         main_pb.inc(1);

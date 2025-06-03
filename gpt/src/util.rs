@@ -1,5 +1,7 @@
+use std::ops::Deref;
+
 use anyhow::Result;
-use candle_core::Tensor;
+use candle_core::{Tensor, backprop::GradStore};
 use candle_nn::VarMap;
 use rand::{
     distr::{Distribution, weighted::WeightedIndex},
@@ -46,4 +48,24 @@ pub fn count_params(varmap: &VarMap) -> usize {
         .iter()
         .map(|var| var.as_tensor().elem_count())
         .sum()
+}
+
+pub fn print_gradient_info(varmap: &VarMap, gradients: &GradStore) -> Result<()> {
+    let data = varmap.data().lock().unwrap();
+    for (name, var) in data.iter() {
+        let tensor = var.deref();
+        if let Some(grad) = gradients.get(tensor) {
+            let grad_squared = grad.sqr()?;
+            let grad_norm: f32 = grad_squared.sum_all()?.sqrt()?.to_scalar()?;
+            println!("gradient norm for {name}: {:.4}", grad_norm);
+            if grad_norm > 10.0 {
+                println!("  ⚠️  WARNING: Large gradient!");
+            } else if grad_norm < 1e-6 {
+                println!("  ⚠️  WARNING: Vanishing gradient!");
+            }
+        } else {
+            println!("⚠️  WARNING: No gradient for {name}!");
+        }
+    }
+    Ok(())
 }
