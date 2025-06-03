@@ -219,11 +219,13 @@ fn main() -> Result<()> {
         varmap.load(load)?;
     }
 
-    let params = ParamsAdamW {
-        lr: args.lr,
-        ..Default::default()
-    };
-    let mut optimizer = AdamW::new(varmap.all_vars(), params)?;
+    let mut optimizer = AdamW::new(
+        varmap.all_vars(),
+        ParamsAdamW {
+            lr: args.lr,
+            ..Default::default()
+        },
+    )?;
 
     let num_params: usize = varmap
         .all_vars()
