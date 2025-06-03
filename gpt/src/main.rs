@@ -42,6 +42,7 @@ fn main() -> Result<()> {
 
     let training_corpus = std::fs::read_to_string(&args.corpus)?;
     let tokenizer = Tokenizer::from_string(&training_corpus)?;
+    let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
 
@@ -199,7 +200,9 @@ fn main() -> Result<()> {
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
         let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
+        print!("{}", args.context);
         language_generate_and_print(
+            &context,
             &model_no_grad,
             args.block_size,
             args.chars,

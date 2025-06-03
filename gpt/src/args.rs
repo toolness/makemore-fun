@@ -77,6 +77,10 @@ pub struct Args {
     /// The learning rate.
     #[arg(long, default_value_t = 0.01)]
     pub lr: f64,
+
+    /// Initial context to pass into the model when generating content.
+    #[arg(long, default_value_t = String::from("\n"))]
+    pub context: String,
 }
 
 impl Args {

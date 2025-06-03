@@ -34,6 +34,7 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
 }
 
 pub fn language_generate_and_print(
+    context: &Vec<u32>,
     model: &Box<dyn Module>,
     block_size: usize,
     num_chars: usize,
@@ -41,8 +42,8 @@ pub fn language_generate_and_print(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> Result<Vec<u32>> {
-    let mut result = Vec::with_capacity(num_chars);
-    result.push(0);
+    let mut result = Vec::with_capacity(context.len() + num_chars);
+    result.extend(context.iter());
     for _ in 0..num_chars {
         let block_slice = &result[result.len().saturating_sub(block_size)..];
         let block = Tensor::from_slice(block_slice, (1, block_slice.len()), device)?;
