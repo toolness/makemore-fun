@@ -101,6 +101,45 @@ pub struct Args {
     pub lr: f64,
 }
 
+impl Args {
+    pub fn create_model(&self, vocab_size: usize, vb: VarBuilder) -> Result<Box<dyn Module>> {
+        match self.model {
+            Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
+            Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
+                self.embedding_dims,
+                self.block_size,
+                self.layers,
+                self.heads,
+                vocab_size,
+                self.dropout,
+                vb,
+            )?)),
+        }
+    }
+
+    pub fn create_model_no_grad(
+        &self,
+        vocab_size: usize,
+        varmap: &VarMap,
+        device: &candle_core::Device,
+    ) -> Result<Box<dyn Module>> {
+        // "Freeze" the varmap as detached tensors to ensure that gradients aren't calculated
+        // for our parameters. While this doesn't actually seem to improve performance, it _does_
+        // seem to result in better training, since our evals don't mess with our optimizer: when
+        // running with `--epochs=5000 --lr=1e-3 --blocks=1` the loss improves from 2.193 to 2.179
+        // when using the no-gradient variant of the model for evals.
+        let varmap_data = varmap.data().lock().unwrap();
+        let mut detached_vars: HashMap<String, Tensor> = HashMap::with_capacity(varmap_data.len());
+        for (path, var) in varmap_data.iter() {
+            detached_vars.insert(path.clone(), var.as_detached_tensor());
+        }
+        self.create_model(
+            vocab_size,
+            VarBuilder::from_tensors(detached_vars, DType::F32, device),
+        )
+    }
+}
+
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
 ///
 ///     https://youtu.be/kCc8FmEb1nY
@@ -113,7 +152,7 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
-    let training_corpus = std::fs::read_to_string(args.corpus)?;
+    let training_corpus = std::fs::read_to_string(&args.corpus)?;
     let tokenizer = Tokenizer::from_string(&training_corpus)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
@@ -154,22 +193,7 @@ fn main() -> Result<()> {
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
-    let create_model = |vb: VarBuilder| -> Result<Box<dyn Module>> {
-        match args.model {
-            Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
-            Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
-                args.embedding_dims,
-                args.block_size,
-                args.layers,
-                args.heads,
-                vocab_size,
-                args.dropout,
-                vb,
-            )?)),
-        }
-    };
-
-    let model = create_model(vb)?;
+    let model = args.create_model(vocab_size, vb)?;
 
     if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
@@ -192,23 +216,9 @@ fn main() -> Result<()> {
         println!("varmap vars: {:#?}", data);
     }
 
-    let create_model_no_grad = || -> Result<Box<dyn Module>> {
-        // "Freeze" the varmap as detached tensors to ensure that gradients aren't calculated
-        // for our parameters. While this doesn't actually seem to improve performance, it _does_
-        // seem to result in better training, since our evals don't mess with our optimizer: when
-        // running with `--epochs=5000 --lr=1e-3 --blocks=1` the loss improves from 2.193 to 2.179
-        // when using the no-gradient variant of the model for evals.
-        let varmap_data = varmap.data().lock().unwrap();
-        let mut detached_vars: HashMap<String, Tensor> = HashMap::with_capacity(varmap_data.len());
-        for (path, var) in varmap_data.iter() {
-            detached_vars.insert(path.clone(), var.as_detached_tensor());
-        }
-        create_model(VarBuilder::from_tensors(detached_vars, DType::F32, &device))
-    };
-
     let estimate_loss = |name: &str, data: &Tensor, rng: &mut StdRng| -> Result<f32> {
         let mut losses = Vec::with_capacity(EVAL_ITERS);
-        let model_no_grad = create_model_no_grad()?;
+        let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
         let bar = multi_progress.add(ProgressBar::new(EVAL_ITERS as u64));
         bar.set_style(
             ProgressStyle::with_template(
@@ -237,8 +247,7 @@ fn main() -> Result<()> {
             // _are_ being calculated.
             //
             // I think the "real" way to disable backprop calculation is to actually detach
-            // the _variables_, not the inputs, which is why I wrote `create_model_no_grad`
-            // above.
+            // the _variables_, not the inputs, which is why I wrote `create_model_no_grad`.
             let (xs, ys) = get_batch(&data, rng)?;
             let logits = model_no_grad.forward(&xs)?;
             let loss = language_loss(&logits, &ys)?;
@@ -301,7 +310,7 @@ fn main() -> Result<()> {
 
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
-        let model_no_grad = create_model_no_grad()?;
+        let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
         language_generate_and_print(
             &model_no_grad,
             args.block_size,
