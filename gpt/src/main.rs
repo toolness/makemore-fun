@@ -22,6 +22,7 @@ use language_model::{language_generate_and_print, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use transformer_language_model::TransformerLanguageModel;
+use util::count_params;
 
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 500;
@@ -227,12 +228,7 @@ fn main() -> Result<()> {
         },
     )?;
 
-    let num_params: usize = varmap
-        .all_vars()
-        .iter()
-        .map(|var| var.as_tensor().elem_count())
-        .sum();
-    println!("Parameters in model: {}", num_params);
+    println!("Parameters in model: {}", count_params(&varmap));
 
     if args.vars {
         let data = varmap.data().lock().unwrap();

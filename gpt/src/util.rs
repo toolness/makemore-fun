@@ -1,5 +1,6 @@
 use anyhow::Result;
 use candle_core::Tensor;
+use candle_nn::VarMap;
 use rand::{
     distr::{Distribution, weighted::WeightedIndex},
     rngs::StdRng,
@@ -37,4 +38,12 @@ pub fn assert_equal_tensors(a: Tensor, b: Tensor) -> Result<()> {
         assert_eq!(item, 1);
     }
     Ok(())
+}
+
+pub fn count_params(varmap: &VarMap) -> usize {
+    varmap
+        .all_vars()
+        .iter()
+        .map(|var| var.as_tensor().elem_count())
+        .sum()
 }
