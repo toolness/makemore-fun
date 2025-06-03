@@ -52,6 +52,32 @@ impl Display for Device {
     }
 }
 
+impl Device {
+    pub fn to_candle_device(&self) -> Result<candle_core::Device> {
+        match self {
+            Device::Cpu => Ok(candle_core::Device::Cpu),
+            Device::Cuda => {
+                if cfg!(feature = "cuda") {
+                    Ok(candle_core::Device::new_cuda(0)?)
+                } else {
+                    return Err(anyhow!(
+                        "CUDA is not supported in this build, you need to compile with the 'cuda' feature!"
+                    ));
+                }
+            }
+            Device::Metal => {
+                if cfg!(feature = "metal") {
+                    Ok(candle_core::Device::new_metal(0)?)
+                } else {
+                    return Err(anyhow!(
+                        "Metal is not supported in this build, you need to compile with the 'metal' feature!"
+                    ));
+                }
+            }
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct Args {
     /// Whether to display information about the variables in the network.
@@ -126,27 +152,7 @@ fn main() -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let seed = args.seed.unwrap_or(timestamp);
     let mut rng = StdRng::seed_from_u64(seed);
-    let device: candle_core::Device = match args.device {
-        Device::Cpu => candle_core::Device::Cpu,
-        Device::Cuda => {
-            if cfg!(feature = "cuda") {
-                candle_core::Device::new_cuda(0)?
-            } else {
-                return Err(anyhow!(
-                    "CUDA is not supported in this build, you need to compile with the 'cuda' feature!"
-                ));
-            }
-        }
-        Device::Metal => {
-            if cfg!(feature = "metal") {
-                candle_core::Device::new_metal(0)?
-            } else {
-                return Err(anyhow!(
-                    "Metal is not supported in this build, you need to compile with the 'metal' feature!"
-                ));
-            }
-        }
-    };
+    let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
     let training_corpus = std::fs::read_to_string(args.corpus)?;
