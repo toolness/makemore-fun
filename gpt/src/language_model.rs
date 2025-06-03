@@ -33,6 +33,45 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     Ok(loss)
 }
 
+pub struct LogitsGenerator<'a> {
+    context: Vec<u32>,
+    model: &'a Box<dyn Module>,
+    block_size: usize,
+    device: &'a Device,
+}
+
+impl<'a> LogitsGenerator<'a> {
+    pub fn new(
+        context: &[u32],
+        model: &'a Box<dyn Module>,
+        block_size: usize,
+        device: &'a Device,
+    ) -> Result<Self> {
+        let context = context[context.len().saturating_sub(block_size)..].to_vec();
+        Ok(Self {
+            context,
+            model,
+            block_size,
+            device,
+        })
+    }
+
+    fn logits(&self) -> Result<Tensor> {
+        let block = Tensor::from_slice(&self.context, (1, self.context.len()), self.device)?;
+        let logits = self.model.forward(&block)?;
+        // Take just the logits for the final time step.
+        let logits = logits.i((.., self.context.len() - 1, ..))?;
+        Ok(logits)
+    }
+
+    fn push(&mut self, token: u32) {
+        if self.context.len() == self.block_size {
+            self.context.remove(0);
+        }
+        self.context.push(token);
+    }
+}
+
 pub fn language_generate_and_print(
     context: &Vec<u32>,
     temperature: f32,
@@ -43,14 +82,11 @@ pub fn language_generate_and_print(
     device: &Device,
     tokenizer: &Tokenizer,
 ) -> Result<Vec<u32>> {
+    let mut generator = LogitsGenerator::new(&context, model, block_size, device)?;
     let mut result = Vec::with_capacity(context.len() + num_chars);
     result.extend(context.iter());
     for _ in 0..num_chars {
-        let block_slice = &result[result.len().saturating_sub(block_size)..];
-        let block = Tensor::from_slice(block_slice, (1, block_slice.len()), device)?;
-        let logits = model.forward(&block)?;
-        // Take just the logits for the final time step.
-        let logits = logits.i((.., block_slice.len() - 1, ..))?;
+        let logits = generator.logits()?;
         let token = if temperature == 0.0 {
             logits.argmax(1)?.get(0)?.to_scalar()?
         } else {
@@ -60,6 +96,7 @@ pub fn language_generate_and_print(
             let sm = softmax(&logits, 1)?;
             multinomial(&sm, rng)?
         };
+        generator.push(token);
         print!("{}", tokenizer.decode(&vec![token])?);
         io::stdout().flush()?;
         result.push(token);
