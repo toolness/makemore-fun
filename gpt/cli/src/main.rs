@@ -56,15 +56,36 @@ fn main() -> Result<()> {
         None
     };
 
-    if let Some(tokenizer) = &safetensors_tokenizer {
-        println!(
-            "LOADED SAFE TENSORS TOKENIZER {:?}",
-            tokenizer.clone().into_char_vec()
-        );
+    let mut training_info: Option<(usize, Tensor)> = None;
+    let mut training_tokenizer: Option<Tokenizer> = None;
+
+    if args.epochs > 0 || safetensors_tokenizer.is_none() {
+        let (tokenizer, training_data) =
+            generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
+        if args.epochs > 0 {
+            training_info = Some((args.epochs, training_data));
+        }
+        training_tokenizer = Some(tokenizer);
     }
 
-    let (tokenizer, training_data) =
-        generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
+    let tokenizer = match (safetensors_tokenizer, training_tokenizer) {
+        (None, None) => {
+            return Err(anyhow!("Unable to load tokenizer!"));
+        }
+        (None, Some(tokenizer)) => tokenizer,
+        (Some(tokenizer), None) => tokenizer,
+        (Some(safetensors_tokenizer), Some(training_tokenizer)) => {
+            if safetensors_tokenizer.len() != training_tokenizer.len() {
+                // Return an error, the model has been trained assuming one vocabulary
+                // size, we can't train it with a different vocabulary size.
+                return Err(anyhow!(
+                    "Mismatch between tokenizer data in safetensors file and training data!"
+                ));
+            }
+            safetensors_tokenizer
+        }
+    };
+
     let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
@@ -92,63 +113,60 @@ fn main() -> Result<()> {
         }
     }
 
-    let mut optimizer = AdamW::new(
-        varmap.all_vars(),
-        ParamsAdamW {
-            lr: args.lr,
-            ..Default::default()
-        },
-    )?;
-
     if args.vars {
         let data = varmap.data().lock().unwrap();
         println!("varmap vars: {:#?}", data);
     }
 
-    let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+    if let Some((epochs, training_data)) = training_info {
+        let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
 
-    let main_pb = multi_progress.add(ProgressBar::new(args.epochs as u64));
-    main_pb.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .unwrap()
-        .progress_chars("##-"),
-    );
+        let main_pb = multi_progress.add(ProgressBar::new(epochs as u64));
+        main_pb.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("##-"),
+        );
 
-    let trainer = Trainer::new(training_data, args.batch_size, args.block_size)?;
+        let trainer = Trainer::new(training_data, args.batch_size, args.block_size)?;
 
-    if args.epochs > 0 {
         trainer.estimate_loss(
             "Initial".to_owned(),
             &mut rng,
             &multi_progress,
             &args.create_model_no_grad(vocab_size, &varmap, &device)?,
         )?;
-    }
-    for i in 1..=args.epochs {
-        main_pb.set_message("Training");
-        let (xs, ys) = trainer.get_batch(TrainingSet::Train, &mut rng)?;
-        let logits = model.forward(&xs)?;
-        let loss = language_loss(&logits, &ys)?;
-        let gradients = loss.backward()?;
-        if args.vars && i == args.epochs {
-            print_gradient_info(&varmap, &gradients)?;
-        }
-        optimizer.step(&gradients)?;
-        main_pb.inc(1);
+        let mut optimizer = AdamW::new(
+            varmap.all_vars(),
+            ParamsAdamW {
+                lr: args.lr,
+                ..Default::default()
+            },
+        )?;
+        for i in 1..=epochs {
+            main_pb.set_message("Training");
+            let (xs, ys) = trainer.get_batch(TrainingSet::Train, &mut rng)?;
+            let logits = model.forward(&xs)?;
+            let loss = language_loss(&logits, &ys)?;
+            let gradients = loss.backward()?;
+            if args.vars && i == epochs {
+                print_gradient_info(&varmap, &gradients)?;
+            }
+            optimizer.step(&gradients)?;
+            main_pb.inc(1);
 
-        if i % EVAL_INTERVAL == 0 || i == args.epochs {
-            trainer.estimate_loss(
-                format!("Epoch {i}"),
-                &mut rng,
-                &multi_progress,
-                &args.create_model_no_grad(vocab_size, &varmap, &device)?,
-            )?;
+            if i % EVAL_INTERVAL == 0 || i == epochs {
+                trainer.estimate_loss(
+                    format!("Epoch {i}"),
+                    &mut rng,
+                    &multi_progress,
+                    &args.create_model_no_grad(vocab_size, &varmap, &device)?,
+                )?;
+            }
         }
-    }
 
-    if args.epochs > 0 {
         let end_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
         println!("Total training time: {} ms", end_time - start_time)
     }
