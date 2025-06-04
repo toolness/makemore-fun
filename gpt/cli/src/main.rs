@@ -25,7 +25,10 @@ const EVAL_INTERVAL: usize = 500;
 const EVAL_ITERS: usize = 200;
 
 /// Key in safetensors file to store tokenizer vocabulary.
-const TOKENIZER_VOCABULARY_KEY: &'static str = "tokenizer_vocabulary";
+/// Prefixing it with "BUFFER." because this is similar to a pytorch
+/// buffer and we want to make it obvious that it's not a trainable
+/// model parameter.
+const TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
 
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
 ///
