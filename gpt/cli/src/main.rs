@@ -1,10 +1,5 @@
 mod args;
-mod bigram_language_model;
 mod device;
-mod language_model;
-mod tokenizer;
-mod transformer_language_model;
-mod util;
 
 use std::{
     io::Write,
@@ -17,11 +12,11 @@ use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
+use gpt_core::language_model::{LanguageGenerator, language_loss};
+use gpt_core::tokenizer::Tokenizer;
+use gpt_core::util::{count_params, print_gradient_info};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use language_model::{LanguageGenerator, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use tokenizer::Tokenizer;
-use util::{count_params, print_gradient_info};
 
 /// After how many epochs do we evaluate the model again?
 const EVAL_INTERVAL: usize = 500;

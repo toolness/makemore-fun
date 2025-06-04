@@ -1,26 +1,19 @@
-[package]
-name = "gpt"
+[workspace]
+members = [
+    "cli",
+    "gpt-core"
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = {version="1.0.98", features=["backtrace"]}
 approx = "0.5.1"
 candle-core = "0.9.1"
 candle-nn = "0.9.1"
 candle-optimisers = "0.9.0"
-clap = {version="4.5.39", features=["derive"]}
-indicatif = "0.17.11"
+gpt-core = { path = "./gpt-core" }
 rand = "0.9.1"
-
-[features]
-default = []
-cuda = [
-    "candle-core/cuda",
-    "candle-nn/cuda",
-    "candle-optimisers/cuda"
-]
-metal = [
-    "candle-core/metal",
-    "candle-nn/metal"
-]

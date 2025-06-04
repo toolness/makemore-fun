@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::bigram_language_model::BigramLanguageModel;
 use crate::device::Device;
-use crate::transformer_language_model::TransformerLanguageModel;
 use anyhow::Result;
 use candle_core::{DType, Tensor};
 use candle_nn::{Module, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
+use gpt_core::bigram_language_model::BigramLanguageModel;
+use gpt_core::transformer_language_model::TransformerLanguageModel;
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {

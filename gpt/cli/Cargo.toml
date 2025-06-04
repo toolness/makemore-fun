@@ -1,0 +1,27 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = {workspace = true}
+approx = {workspace = true}
+candle-core = {workspace = true}
+candle-nn = {workspace = true}
+candle-optimisers = {workspace = true}
+rand = {workspace = true}
+clap = {version="4.5.39", features=["derive"]}
+indicatif = "0.17.11"
+gpt-core = {workspace = true}
+
+[features]
+default = []
+cuda = [
+    "candle-core/cuda",
+    "candle-nn/cuda",
+    "candle-optimisers/cuda"
+]
+metal = [
+    "candle-core/metal",
+    "candle-nn/metal"
+]
