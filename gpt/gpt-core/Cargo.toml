@@ -8,5 +8,4 @@ anyhow = {workspace = true}
 approx = {workspace = true}
 candle-core = {workspace = true}
 candle-nn = {workspace = true}
-candle-optimisers = {workspace = true}
 rand = {workspace = true}

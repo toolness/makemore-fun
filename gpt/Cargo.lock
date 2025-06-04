@@ -787,7 +787,6 @@ dependencies = [
  "approx",
  "candle-core",
  "candle-nn",
- "candle-optimisers",
  "rand",
 ]
 
