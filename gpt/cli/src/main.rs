@@ -10,7 +10,7 @@ use std::{
 use anyhow::Result;
 use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
-use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
 use gpt_core::language_model::{LanguageGenerator, language_loss};
 use gpt_core::tokenizer::Tokenizer;
@@ -36,41 +36,15 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
-    let training_corpus = std::fs::read_to_string(&args.corpus)?;
-    let tokenizer = Tokenizer::from_string(&training_corpus)?;
-    let context = tokenizer.encode(&args.context)?;
-    let vocab_size = tokenizer.len();
+    let trainer = Trainer::new(
+        std::fs::read_to_string(&args.corpus)?,
+        args.batch_size,
+        args.block_size,
+        &device,
+    )?;
+    let context = trainer.tokenizer.encode(&args.context)?;
+    let vocab_size = trainer.tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
-
-    let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
-    let data_len = data.shape().dim(0)?;
-
-    println!("Data is {} tokens.", data_len);
-    let train_split_index = (0.9 * (data_len as f64)) as usize;
-    let train_data = data.i(..train_split_index)?;
-    let val_data = data.i(train_split_index..)?;
-    println!("Training data is {} tokens.", train_data.shape().dim(0)?);
-    println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
-
-    let get_batch = |data: &Tensor, rng: &mut StdRng| -> Result<(Tensor, Tensor)> {
-        let mut x = Vec::with_capacity(args.batch_size);
-        let mut y = Vec::with_capacity(args.batch_size);
-        let data_len = data.shape().dim(0)?;
-        for _ in 0..args.batch_size {
-            // Ideally we'd use candle for these random numbers, but as far as I can tell,
-            // it can only generate random floats. I guess we could round/cast them to
-            // integers but for now I'm just going to use the rand crate instead.
-            //
-            // Also, I think this might be doing a lot of back-and-forth between GPU and CPU.
-            // If we can use Candle for all of this, and only use Tensors, rather than pulling
-            // from the data Tensor into a Vec and then converting it back into a Tensor,
-            // this might be able to run faster on GPUs.
-            let idx: usize = rng.random_range(0..(data_len - args.block_size));
-            x.push(data.i(idx..(args.block_size + idx))?);
-            y.push(data.i((idx + 1)..(args.block_size + idx + 1))?);
-        }
-        Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
-    };
 
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
     // println!("xs:\n{xs}\nys:\n{ys}");
@@ -101,56 +75,6 @@ fn main() -> Result<()> {
         println!("varmap vars: {:#?}", data);
     }
 
-    let estimate_loss = |name: &str, data: &Tensor, rng: &mut StdRng| -> Result<f32> {
-        let mut losses = Vec::with_capacity(EVAL_ITERS);
-        let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
-        let bar = multi_progress.add(ProgressBar::new(EVAL_ITERS as u64));
-        bar.set_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {bar:30.white/white} {pos:>7}/{len:7} {msg}",
-            )
-            .unwrap()
-            .progress_chars("##-"),
-        );
-        bar.set_message(format!("Estimating {name}"));
-        for _ in 0..EVAL_ITERS {
-            // I asked on HF Discord and someone said the analog of torch.no_grad
-            // is calling .detach() on inputs, but I'm not really sure if the advice I was
-            // given is correct. Try adding the following logging just after we call get_batch():
-            //
-            //     println!("xs is_variable={} track_op={}", xs.is_variable(), xs.track_op());
-            //
-            // This will show false for both, which makes sense--we don't _want_ to treat
-            // the input as a variable or track its gradient. Then looking at the implementation
-            // for is_variable(), track_op() and detach(), it's clear that `xs` is just being
-            // cloned when we call detach() and nothing more... If that's the case, it means our
-            // gradients might get totally messed up every time we estimate the loss.
-            //
-            // Another way to demonstrate this is by actually using detach() during _training_
-            // and displaying the gradients. If detach() is working, then no gradients should
-            // actually be calculated, but running the CLI with `--vars` indicates that they
-            // _are_ being calculated.
-            //
-            // I think the "real" way to disable backprop calculation is to actually detach
-            // the _variables_, not the inputs, which is why I wrote `create_model_no_grad`.
-            let (xs, ys) = get_batch(&data, rng)?;
-            let logits = model_no_grad.forward(&xs)?;
-            let loss = language_loss(&logits, &ys)?;
-            losses.push(loss.to_scalar()?);
-            bar.inc(1);
-        }
-        let loss = losses.iter().sum::<f32>() / losses.len() as f32;
-        bar.finish_and_clear();
-        Ok(loss)
-    };
-
-    let calculate_loss = |prefix: String, rng: &mut StdRng| -> Result<()> {
-        let train_loss = estimate_loss("train loss", &train_data, rng)?;
-        let val_loss = estimate_loss("val loss", &val_data, rng)?;
-        println!("{prefix} train loss {train_loss:.4}, val loss {val_loss:.4}",);
-        Ok(())
-    };
-
     let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
 
     let main_pb = multi_progress.add(ProgressBar::new(args.epochs as u64));
@@ -163,11 +87,16 @@ fn main() -> Result<()> {
     );
 
     if args.epochs > 0 {
-        calculate_loss("Initial".to_owned(), &mut rng)?;
+        trainer.estimate_loss(
+            "Initial".to_owned(),
+            &mut rng,
+            &multi_progress,
+            &args.create_model_no_grad(vocab_size, &varmap, &device)?,
+        )?;
     }
     for i in 1..=args.epochs {
         main_pb.set_message("Training");
-        let (xs, ys) = get_batch(&train_data, &mut rng)?;
+        let (xs, ys) = trainer.get_batch(TrainingSet::Train, &mut rng)?;
         let logits = model.forward(&xs)?;
         let loss = language_loss(&logits, &ys)?;
         let gradients = loss.backward()?;
@@ -178,7 +107,12 @@ fn main() -> Result<()> {
         main_pb.inc(1);
 
         if i % EVAL_INTERVAL == 0 || i == args.epochs {
-            calculate_loss(format!("Epoch {i}"), &mut rng)?;
+            trainer.estimate_loss(
+                format!("Epoch {i}"),
+                &mut rng,
+                &multi_progress,
+                &args.create_model_no_grad(vocab_size, &varmap, &device)?,
+            )?;
         }
     }
 
@@ -200,8 +134,12 @@ fn main() -> Result<()> {
         let mut language_generator =
             LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
         for _ in 0..args.chars {
-            let char =
-                language_generator.next_char(&mut rng, &tokenizer, args.temperature, &device)?;
+            let char = language_generator.next_char(
+                &mut rng,
+                &trainer.tokenizer,
+                args.temperature,
+                &device,
+            )?;
             print!("{}", char);
             std::io::stdout().flush()?;
         }
@@ -223,5 +161,136 @@ fn add_extension_if_missing(filename: &String, extension: &str) -> String {
         new_path.to_string_lossy().into_owned()
     } else {
         filename.to_string()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum TrainingSet {
+    Train,
+    Val,
+}
+
+pub struct Trainer {
+    batch_size: usize,
+    block_size: usize,
+    train_data: Tensor,
+    val_data: Tensor,
+    tokenizer: Tokenizer,
+}
+
+impl Trainer {
+    pub fn new(
+        training_corpus: String,
+        batch_size: usize,
+        block_size: usize,
+        device: &candle_core::Device,
+    ) -> Result<Self> {
+        let tokenizer = Tokenizer::from_string(&training_corpus)?;
+        let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
+        let data_len = data.shape().dim(0)?;
+        println!("Data is {} tokens.", data_len);
+        let train_split_index = (0.9 * (data_len as f64)) as usize;
+        let train_data = data.i(..train_split_index)?;
+        let val_data = data.i(train_split_index..)?;
+        println!("Training data is {} tokens.", train_data.shape().dim(0)?);
+        println!("Validation data is {} tokens.", val_data.shape().dim(0)?);
+        Ok(Self {
+            batch_size,
+            block_size,
+            train_data,
+            val_data,
+            tokenizer,
+        })
+    }
+
+    fn get_dataset(&self, training_set: TrainingSet) -> &Tensor {
+        match training_set {
+            TrainingSet::Train => &self.train_data,
+            TrainingSet::Val => &self.val_data,
+        }
+    }
+
+    pub fn get_batch(
+        &self,
+        training_set: TrainingSet,
+        rng: &mut StdRng,
+    ) -> Result<(Tensor, Tensor)> {
+        let data = self.get_dataset(training_set);
+        let mut x = Vec::with_capacity(self.batch_size);
+        let mut y = Vec::with_capacity(self.batch_size);
+        let data_len = data.shape().dim(0)?;
+        for _ in 0..self.batch_size {
+            // Ideally we'd use candle for these random numbers, but as far as I can tell,
+            // it can only generate random floats. I guess we could round/cast them to
+            // integers but for now I'm just going to use the rand crate instead.
+            //
+            // Also, I think this might be doing a lot of back-and-forth between GPU and CPU.
+            // If we can use Candle for all of this, and only use Tensors, rather than pulling
+            // from the data Tensor into a Vec and then converting it back into a Tensor,
+            // this might be able to run faster on GPUs.
+            let idx: usize = rng.random_range(0..(data_len - self.block_size));
+            x.push(data.i(idx..(self.block_size + idx))?);
+            y.push(data.i((idx + 1)..(self.block_size + idx + 1))?);
+        }
+        Ok((Tensor::stack(&x, 0)?, Tensor::stack(&y, 0)?))
+    }
+
+    pub fn estimate_loss(
+        &self,
+        prefix: String,
+        rng: &mut StdRng,
+        multi_progress: &MultiProgress,
+        model_no_grad: &Box<dyn Module>,
+    ) -> Result<()> {
+        let estimate_dataset_loss = |training_set: TrainingSet, rng: &mut StdRng| -> Result<f32> {
+            let mut losses = Vec::with_capacity(EVAL_ITERS);
+            let bar = multi_progress.add(ProgressBar::new(EVAL_ITERS as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] {bar:30.white/white} {pos:>7}/{len:7} {msg}",
+                )
+                .unwrap()
+                .progress_chars("##-"),
+            );
+            let name = match training_set {
+                TrainingSet::Train => "train loss",
+                TrainingSet::Val => "val loss",
+            };
+            bar.set_message(format!("Estimating {name}"));
+            for _ in 0..EVAL_ITERS {
+                // I asked on HF Discord and someone said the analog of torch.no_grad
+                // is calling .detach() on inputs, but I'm not really sure if the advice I was
+                // given is correct. Try adding the following logging just after we call get_batch():
+                //
+                //     println!("xs is_variable={} track_op={}", xs.is_variable(), xs.track_op());
+                //
+                // This will show false for both, which makes sense--we don't _want_ to treat
+                // the input as a variable or track its gradient. Then looking at the implementation
+                // for is_variable(), track_op() and detach(), it's clear that `xs` is just being
+                // cloned when we call detach() and nothing more... If that's the case, it means our
+                // gradients might get totally messed up every time we estimate the loss.
+                //
+                // Another way to demonstrate this is by actually using detach() during _training_
+                // and displaying the gradients. If detach() is working, then no gradients should
+                // actually be calculated, but running the CLI with `--vars` indicates that they
+                // _are_ being calculated.
+                //
+                // I think the "real" way to disable backprop calculation is to actually detach
+                // the _variables_, not the inputs, which is why I wrote `create_model_no_grad`.
+                let (xs, ys) = self.get_batch(training_set, rng)?;
+                let logits = model_no_grad.forward(&xs)?;
+                let loss = language_loss(&logits, &ys)?;
+                losses.push(loss.to_scalar()?);
+                bar.inc(1);
+            }
+            let loss = losses.iter().sum::<f32>() / losses.len() as f32;
+            bar.finish_and_clear();
+            Ok(loss)
+        };
+
+        let train_loss = estimate_dataset_loss(TrainingSet::Train, rng)?;
+        let val_loss = estimate_dataset_loss(TrainingSet::Val, rng)?;
+        println!("{prefix} train loss {train_loss:.4}, val loss {val_loss:.4}",);
+        Ok(())
     }
 }
