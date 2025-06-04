@@ -24,6 +24,9 @@ const EVAL_INTERVAL: usize = 500;
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
 
+/// Key in safetensors file to store tokenizer vocabulary.
+const TOKENIZER_VOCABULARY_KEY: &'static str = "tokenizer_vocabulary";
+
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
 ///
 ///     https://youtu.be/kCc8FmEb1nY
@@ -36,18 +39,29 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
+    let mut safetensors_tokenizer: Option<Tokenizer> = None;
+
     let safetensors = if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
         println!("Loading weights from {load}.");
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
+        if let Ok(tokenizer_tensor) = data.load(TOKENIZER_VOCABULARY_KEY, &device) {
+            safetensors_tokenizer = Some(Tokenizer::from_tensor(&tokenizer_tensor)?);
+        }
         Some(data)
     } else {
         None
     };
 
+    if let Some(tokenizer) = &safetensors_tokenizer {
+        println!(
+            "LOADED SAFE TENSORS TOKENIZER {:?}",
+            tokenizer.clone().into_char_vec()
+        );
+    }
+
     let (tokenizer, training_data) =
         generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
-    let trainer = Trainer::new(training_data, args.batch_size, args.block_size)?;
     let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
@@ -55,7 +69,7 @@ fn main() -> Result<()> {
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
     // println!("xs:\n{xs}\nys:\n{ys}");
 
-    let varmap = VarMap::new();
+    let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     let model = args.create_model(vocab_size, vb)?;
@@ -99,6 +113,8 @@ fn main() -> Result<()> {
         .progress_chars("##-"),
     );
 
+    let trainer = Trainer::new(training_data, args.batch_size, args.block_size)?;
+
     if args.epochs > 0 {
         trainer.estimate_loss(
             "Initial".to_owned(),
@@ -137,6 +153,24 @@ fn main() -> Result<()> {
     if let Some(save) = &args.save {
         let save = normalize_safetensors_filename(save);
         println!("Saving weights to {save}.");
+        // We need to get the key, which creates it, before we can actually
+        // set it (this feels very weird).
+        //
+        // Note that this mutates the varmap, which I don't really like,
+        // because e.g. our gradient inspection tools might think it's a
+        // real variable, when it's actually not. But this is right before
+        // we perform inference anyways so it's not that big a deal.
+        varmap.get(
+            (tokenizer.len(),),
+            TOKENIZER_VOCABULARY_KEY,
+            candle_nn::Init::Const(0.0),
+            DType::U32,
+            &device,
+        )?;
+        varmap.set_one(
+            TOKENIZER_VOCABULARY_KEY,
+            tokenizer.clone().into_tensor(&device)?,
+        )?;
         varmap.save(save)?;
     }
 

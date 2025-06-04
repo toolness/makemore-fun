@@ -6,6 +6,7 @@ use std::{
 use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 
+#[derive(Clone)]
 pub struct Tokenizer {
     ctoi: HashMap<char, u32>,
     itoc: HashMap<u32, char>,
