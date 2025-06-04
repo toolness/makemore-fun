@@ -7,6 +7,7 @@ mod transformer_language_model;
 mod util;
 
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -17,7 +18,7 @@ use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use language_model::{language_generate_and_print, language_loss};
+use language_model::{LanguageGenerator, language_loss};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokenizer::Tokenizer;
 use util::{count_params, print_gradient_info};
@@ -201,16 +202,14 @@ fn main() -> Result<()> {
         let mut rng = StdRng::seed_from_u64(seed);
         let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
         print!("{}", args.context);
-        language_generate_and_print(
-            &context,
-            args.temperature,
-            &model_no_grad,
-            args.block_size,
-            args.chars,
-            &mut rng,
-            &device,
-            &tokenizer,
-        )?;
+        let mut language_generator =
+            LanguageGenerator::new(&context, &model_no_grad, args.block_size, &device)?;
+        for _ in 0..args.chars {
+            let char = language_generator.next_char(&mut rng, &tokenizer, args.temperature)?;
+            print!("{}", char);
+            std::io::stdout().flush()?;
+        }
+        println!("");
     }
 
     Ok(())

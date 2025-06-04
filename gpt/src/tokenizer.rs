@@ -41,14 +41,19 @@ impl Tokenizer {
         Ok(result)
     }
 
+    pub fn decode_char(&self, token: u32) -> Result<char> {
+        let Some(&char) = self.itoc.get(&token) else {
+            return Err(anyhow!("'{}' is not a valid token", token));
+        };
+        Ok(char)
+    }
+
+    #[cfg(test)]
     pub fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result = String::with_capacity(tokens.len());
 
-        for token in tokens.iter() {
-            let Some(char) = self.itoc.get(&token) else {
-                return Err(anyhow!("'{}' is not a valid token", token));
-            };
-            result.push(*char);
+        for &token in tokens.iter() {
+            result.push(self.decode_char(token)?);
         }
 
         Ok(result)

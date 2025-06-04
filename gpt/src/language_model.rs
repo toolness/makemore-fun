@@ -1,5 +1,3 @@
-use std::io::{self, Write};
-
 use anyhow::Result;
 use approx::assert_relative_eq;
 use candle_core::{D, Device, IndexOp, Tensor};
@@ -33,14 +31,14 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     Ok(loss)
 }
 
-pub struct LogitsGenerator<'a> {
+pub struct LanguageGenerator<'a> {
     context: Vec<u32>,
     model: &'a Box<dyn Module>,
     block_size: usize,
     device: &'a Device,
 }
 
-impl<'a> LogitsGenerator<'a> {
+impl<'a> LanguageGenerator<'a> {
     pub fn new(
         context: &[u32],
         model: &'a Box<dyn Module>,
@@ -56,7 +54,7 @@ impl<'a> LogitsGenerator<'a> {
         })
     }
 
-    fn logits(&self) -> Result<Tensor> {
+    pub fn logits(&self) -> Result<Tensor> {
         let block = Tensor::from_slice(&self.context, (1, self.context.len()), self.device)?;
         let logits = self.model.forward(&block)?;
         // Take just the logits for the final time step.
@@ -70,37 +68,24 @@ impl<'a> LogitsGenerator<'a> {
         }
         self.context.push(token);
     }
-}
 
-pub fn language_generate_and_print(
-    context: &Vec<u32>,
-    temperature: f32,
-    model: &Box<dyn Module>,
-    block_size: usize,
-    num_chars: usize,
-    rng: &mut StdRng,
-    device: &Device,
-    tokenizer: &Tokenizer,
-) -> Result<Vec<u32>> {
-    let mut generator = LogitsGenerator::new(&context, model, block_size, device)?;
-    let mut result = Vec::with_capacity(context.len() + num_chars);
-    result.extend(context.iter());
-    for _ in 0..num_chars {
-        let logits = generator.logits()?;
+    pub fn next_char(
+        &mut self,
+        rng: &mut StdRng,
+        tokenizer: &Tokenizer,
+        temperature: f32,
+    ) -> Result<char> {
+        let logits = self.logits()?;
         let token = if temperature == 0.0 {
             logits.argmax(1)?.get(0)?.to_scalar()?
         } else {
             // It's very weird that I can't just use the division operator here.
             let logits =
-                logits.broadcast_div(&Tensor::from_slice(&[temperature], (1,), device)?)?;
+                logits.broadcast_div(&Tensor::from_slice(&[temperature], (1,), self.device)?)?;
             let sm = softmax(&logits, 1)?;
             multinomial(&sm, rng)?
         };
-        generator.push(token);
-        print!("{}", tokenizer.decode(&vec![token])?);
-        io::stdout().flush()?;
-        result.push(token);
+        self.push(token);
+        Ok(tokenizer.decode_char(token)?)
     }
-    println!("");
-    Ok(result)
 }
