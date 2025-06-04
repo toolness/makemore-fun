@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
@@ -36,6 +36,15 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
+    let safetensors = if let Some(load) = &args.load {
+        let load = normalize_safetensors_filename(load);
+        println!("Loading weights from {load}.");
+        let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
+        Some(data)
+    } else {
+        None
+    };
+
     let trainer = Trainer::new(
         std::fs::read_to_string(&args.corpus)?,
         args.batch_size,
@@ -49,15 +58,22 @@ fn main() -> Result<()> {
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
     // println!("xs:\n{xs}\nys:\n{ys}");
 
-    let mut varmap = VarMap::new();
+    let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     let model = args.create_model(vocab_size, vb)?;
 
-    if let Some(load) = &args.load {
-        let load = normalize_safetensors_filename(load);
-        println!("Loading weights from {load}.");
-        varmap.load(load)?;
+    if let Some(data) = safetensors {
+        let mut tensor_data = varmap.data().lock().unwrap();
+        for (name, var) in tensor_data.iter_mut() {
+            let data = data.load(name, var.device())?;
+            if let Err(err) = var.set(&data) {
+                return Err(anyhow!(
+                    "error setting {name} using data from {:?}: {err}",
+                    args.load
+                ));
+            }
+        }
     }
 
     let mut optimizer = AdamW::new(
