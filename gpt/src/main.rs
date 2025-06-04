@@ -203,9 +203,10 @@ fn main() -> Result<()> {
         let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
         print!("{}", args.context);
         let mut language_generator =
-            LanguageGenerator::new(&context, &model_no_grad, args.block_size, &device)?;
+            LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
         for _ in 0..args.chars {
-            let char = language_generator.next_char(&mut rng, &tokenizer, args.temperature)?;
+            let char =
+                language_generator.next_char(&mut rng, &tokenizer, args.temperature, &device)?;
             print!("{}", char);
             std::io::stdout().flush()?;
         }

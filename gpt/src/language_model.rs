@@ -31,31 +31,24 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     Ok(loss)
 }
 
-pub struct LanguageGenerator<'a> {
+pub struct LanguageGenerator {
     context: Vec<u32>,
-    model: &'a Box<dyn Module>,
+    model: Box<dyn Module>,
     block_size: usize,
-    device: &'a Device,
 }
 
-impl<'a> LanguageGenerator<'a> {
-    pub fn new(
-        context: &[u32],
-        model: &'a Box<dyn Module>,
-        block_size: usize,
-        device: &'a Device,
-    ) -> Result<Self> {
+impl LanguageGenerator {
+    pub fn new(context: &[u32], model: Box<dyn Module>, block_size: usize) -> Result<Self> {
         let context = context[context.len().saturating_sub(block_size)..].to_vec();
         Ok(Self {
             context,
             model,
             block_size,
-            device,
         })
     }
 
-    pub fn logits(&self) -> Result<Tensor> {
-        let block = Tensor::from_slice(&self.context, (1, self.context.len()), self.device)?;
+    pub fn logits(&self, device: &Device) -> Result<Tensor> {
+        let block = Tensor::from_slice(&self.context, (1, self.context.len()), device)?;
         let logits = self.model.forward(&block)?;
         // Take just the logits for the final time step.
         let logits = logits.i((.., self.context.len() - 1, ..))?;
@@ -74,14 +67,15 @@ impl<'a> LanguageGenerator<'a> {
         rng: &mut StdRng,
         tokenizer: &Tokenizer,
         temperature: f32,
+        device: &Device,
     ) -> Result<char> {
-        let logits = self.logits()?;
+        let logits = self.logits(device)?;
         let token = if temperature == 0.0 {
             logits.argmax(1)?.get(0)?.to_scalar()?
         } else {
             // It's very weird that I can't just use the division operator here.
             let logits =
-                logits.broadcast_div(&Tensor::from_slice(&[temperature], (1,), self.device)?)?;
+                logits.broadcast_div(&Tensor::from_slice(&[temperature], (1,), device)?)?;
             let sm = softmax(&logits, 1)?;
             multinomial(&sm, rng)?
         };
