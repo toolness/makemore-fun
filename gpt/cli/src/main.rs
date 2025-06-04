@@ -45,14 +45,11 @@ fn main() -> Result<()> {
         None
     };
 
-    let trainer = Trainer::new(
-        std::fs::read_to_string(&args.corpus)?,
-        args.batch_size,
-        args.block_size,
-        &device,
-    )?;
-    let context = trainer.tokenizer.encode(&args.context)?;
-    let vocab_size = trainer.tokenizer.len();
+    let (tokenizer, training_data) =
+        generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
+    let trainer = Trainer::new(training_data, args.batch_size, args.block_size)?;
+    let context = tokenizer.encode(&args.context)?;
+    let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
 
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
@@ -150,12 +147,8 @@ fn main() -> Result<()> {
         let mut language_generator =
             LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
         for _ in 0..args.chars {
-            let char = language_generator.next_char(
-                &mut rng,
-                &trainer.tokenizer,
-                args.temperature,
-                &device,
-            )?;
+            let char =
+                language_generator.next_char(&mut rng, &tokenizer, args.temperature, &device)?;
             print!("{}", char);
             std::io::stdout().flush()?;
         }
@@ -186,23 +179,24 @@ pub enum TrainingSet {
     Val,
 }
 
+fn generate_training_data(
+    training_corpus: String,
+    device: &candle_core::Device,
+) -> Result<(Tokenizer, Tensor)> {
+    let tokenizer = Tokenizer::from_string(&training_corpus)?;
+    let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
+    Ok((tokenizer, data))
+}
+
 pub struct Trainer {
     batch_size: usize,
     block_size: usize,
     train_data: Tensor,
     val_data: Tensor,
-    tokenizer: Tokenizer,
 }
 
 impl Trainer {
-    pub fn new(
-        training_corpus: String,
-        batch_size: usize,
-        block_size: usize,
-        device: &candle_core::Device,
-    ) -> Result<Self> {
-        let tokenizer = Tokenizer::from_string(&training_corpus)?;
-        let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
+    pub fn new(data: Tensor, batch_size: usize, block_size: usize) -> Result<Self> {
         let data_len = data.shape().dim(0)?;
         println!("Data is {} tokens.", data_len);
         let train_split_index = (0.9 * (data_len as f64)) as usize;
@@ -215,7 +209,6 @@ impl Trainer {
             block_size,
             train_data,
             val_data,
-            tokenizer,
         })
     }
 
