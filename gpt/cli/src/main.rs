@@ -77,6 +77,8 @@ fn main() -> Result<()> {
 
     let model = args.create_model(vocab_size, vb)?;
 
+    println!("Parameters in model: {}", count_params(&varmap));
+
     if let Some(data) = safetensors {
         let mut tensor_data = varmap.data().lock().unwrap();
         for (name, var) in tensor_data.iter_mut() {
@@ -97,8 +99,6 @@ fn main() -> Result<()> {
             ..Default::default()
         },
     )?;
-
-    println!("Parameters in model: {}", count_params(&varmap));
 
     if args.vars {
         let data = varmap.data().lock().unwrap();
