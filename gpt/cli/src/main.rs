@@ -47,7 +47,12 @@ fn main() -> Result<()> {
     let safetensors = if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
         println!("Loading weights from {load}.");
+
+        // This is taken from VarMap::load(), it's too bad it's unsafe.
+        // Actually it is kind of funny that we're loading SAFE tensors in
+        // an UNSAFE block...
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
+
         if let Ok(tokenizer_tensor) = data.load(TOKENIZER_VOCABULARY_KEY, &device) {
             safetensors_tokenizer = Some(Tokenizer::from_tensor(&tokenizer_tensor)?);
         }
@@ -101,6 +106,9 @@ fn main() -> Result<()> {
     println!("Parameters in model: {}", count_params(&varmap));
 
     if let Some(data) = safetensors {
+        // This is mostly what VarMap::load() does, only we've already got thee
+        // safetensors file loaded already, so we're just going to populate the
+        // model params from it.
         let mut tensor_data = varmap.data().lock().unwrap();
         for (name, var) in tensor_data.iter_mut() {
             let data = data.load(name, var.device())?;
