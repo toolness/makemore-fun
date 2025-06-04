@@ -1,6 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    char::CharTryFromError,
+    collections::{HashMap, HashSet},
+};
 
 use anyhow::{Result, anyhow};
+use candle_core::{Device, Tensor};
 
 pub struct Tokenizer {
     ctoi: HashMap<char, u32>,
@@ -8,20 +12,52 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    pub fn from_string(string: &String) -> Result<Self> {
-        let mut all_chars: HashSet<char> = HashSet::new();
-        all_chars.extend(string.chars());
-        let mut all_chars_sorted: Vec<char> = all_chars.iter().copied().collect();
-        all_chars_sorted.sort();
+    pub fn from_char_vec(mut vec: Vec<char>) -> Result<Self> {
+        vec.sort();
         let mut ctoi: HashMap<char, u32> = HashMap::new();
         let mut itoc = HashMap::new();
-        for (i, char) in all_chars_sorted.iter().enumerate() {
+        for (i, char) in vec.iter().enumerate() {
             ctoi.insert(*char, i as u32);
             itoc.insert(i as u32, *char);
         }
         let result = Tokenizer { ctoi, itoc };
 
         Ok(result)
+    }
+
+    pub fn into_char_vec(self) -> Vec<char> {
+        let mut chars: Vec<char> = self.ctoi.into_keys().collect();
+        chars.sort();
+        chars
+    }
+
+    pub fn from_string(string: &String) -> Result<Self> {
+        let mut all_chars: HashSet<char> = HashSet::new();
+        all_chars.extend(string.chars());
+        Tokenizer::from_char_vec(all_chars.iter().copied().collect())
+    }
+
+    /// Given a one-dimensional tensor with each character representing a
+    /// unicode scalar, returns the tokenizer for it.
+    pub fn from_tensor(tensor: &Tensor) -> Result<Self> {
+        let chars: Result<Vec<char>, CharTryFromError> = tensor
+            .to_vec1::<u32>()?
+            .iter()
+            .map(|&u32| char::try_from(u32))
+            .collect();
+        Ok(Tokenizer::from_char_vec(chars?)?)
+    }
+
+    /// Returns a one-dimensional tensor with each character in the vocabulary
+    /// represented by a unicode scalar.
+    pub fn into_tensor(self, device: &Device) -> Result<Tensor> {
+        let len = self.ctoi.len();
+        let vec = self
+            .into_char_vec()
+            .into_iter()
+            .map(|char| char as u32)
+            .collect();
+        Ok(Tensor::from_vec(vec, (len,), device)?)
     }
 
     pub fn len(&self) -> usize {
@@ -156,5 +192,47 @@ mod tests {
 
         let partial_result = tokenizer.encode("abz");
         assert!(partial_result.is_err());
+    }
+
+    #[test]
+    fn test_into_char_vec_basic() {
+        let input = String::from("abc");
+        let tokenizer = Tokenizer::from_string(&input).unwrap();
+        let chars = tokenizer.into_char_vec();
+        assert_eq!(chars, vec!['a', 'b', 'c']);
+    }
+
+    #[test]
+    fn test_into_char_vec_empty() {
+        let input = String::from("");
+        let tokenizer = Tokenizer::from_string(&input).unwrap();
+        let chars = tokenizer.into_char_vec();
+        assert!(chars.is_empty());
+    }
+
+    #[test]
+    fn test_into_char_vec_special_characters() {
+        let input = String::from("!@#");
+        let tokenizer = Tokenizer::from_string(&input).unwrap();
+        let chars = tokenizer.into_char_vec();
+        assert_eq!(chars, vec!['!', '#', '@']);
+    }
+
+    #[test]
+    fn test_into_char_vec_repeated_characters() {
+        let input = String::from("aabbcc");
+        let tokenizer = Tokenizer::from_string(&input).unwrap();
+        let chars = tokenizer.into_char_vec();
+        assert_eq!(chars, vec!['a', 'b', 'c']);
+    }
+
+    #[test]
+    fn test_from_into_tensor_works() {
+        let input = String::from("abc");
+        let tokenizer = Tokenizer::from_string(&input).unwrap();
+        let tensor = tokenizer.into_tensor(&Device::Cpu).unwrap();
+        assert_eq!(tensor.to_vec1::<u32>().unwrap(), vec![97, 98, 99]);
+        let tokenizer = Tokenizer::from_tensor(&tensor).unwrap();
+        assert_eq!(tokenizer.into_char_vec(), vec!['a', 'b', 'c']);
     }
 }
