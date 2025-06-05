@@ -1,7 +1,8 @@
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
-    language_model::LanguageGenerator, tokenizer::Tokenizer,
+    language_model::LanguageGenerator,
+    tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
     transformer_language_model::TransformerLanguageModel,
 };
 use rand::{SeedableRng, rngs::StdRng};
@@ -20,7 +21,7 @@ pub fn generate(
     let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8)?;
 
     // TODO: `BUFFER.tokenizer_vocabulary` should be a const in gpt-core
-    let tokenizer_tensor = safetensors.load("BUFFER.tokenizer_vocabulary", &device)?;
+    let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
 
     let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
     let vocab_size = tokenizer.len();

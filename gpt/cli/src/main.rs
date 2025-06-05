@@ -12,9 +12,12 @@ use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
-use gpt_core::language_model::{LanguageGenerator, language_loss};
 use gpt_core::tokenizer::Tokenizer;
 use gpt_core::util::{count_params, print_gradient_info};
+use gpt_core::{
+    language_model::{LanguageGenerator, language_loss},
+    tokenizer::TOKENIZER_VOCABULARY_KEY,
+};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -23,12 +26,6 @@ const EVAL_INTERVAL: usize = 500;
 
 /// How many batches to compute loss over.
 const EVAL_ITERS: usize = 200;
-
-/// Key in safetensors file to store tokenizer vocabulary.
-/// Prefixing it with "BUFFER." because this is similar to a pytorch
-/// buffer and we want to make it obvious that it's not a trainable
-/// model parameter.
-const TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
 
 /// This is based on Andrej Karpathy's "Let's build GPT: from scratch, in code, spelled out.":
 ///
