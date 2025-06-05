@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "cli",
-    "gpt-core"
+    "gpt-core",
+    "web"
 ]
 resolver = "2"
 
