@@ -6,6 +6,10 @@ To build the web version:
 
 ```
 cargo install wasm-pack
+
+# https://github.com/rust-random/getrandom/issues/208#issuecomment-2944376492
+cargo install wasm-bindgen-cli
+
 cargo install basic-http-server
 cargo run --release -- --save=boop
 RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build web --target web
