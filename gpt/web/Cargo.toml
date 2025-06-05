@@ -7,4 +7,5 @@ edition.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+thiserror = "2.0.12"
 wasm-bindgen = "0.2.100"
