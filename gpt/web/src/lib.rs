@@ -4,11 +4,10 @@ use gpt_core::{
     language_model::LanguageGenerator,
     tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
     transformer_language_model::TransformerLanguageModel,
+    util::load_data_from_safetensors,
 };
 use rand::{SeedableRng, rngs::StdRng};
 use wasm_bindgen::prelude::*;
-
-use anyhow::anyhow;
 
 #[wasm_bindgen]
 pub fn generate(
@@ -25,7 +24,7 @@ pub fn generate(
 
     let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
     let vocab_size = tokenizer.len();
-    let varmap = VarMap::new();
+    let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     // TODO: args should be passed in or pulled from safetensors.
@@ -33,17 +32,7 @@ pub fn generate(
     let model =
         TransformerLanguageModel::new(32, block_size, 1, 4, vocab_size, 0.0, vb).map_err(e)?;
 
-    {
-        let mut tensor_data = varmap.data().lock().unwrap();
-        for (name, var) in tensor_data.iter_mut() {
-            let data = safetensors.load(name, var.device())?;
-            if let Err(err) = var.set(&data) {
-                return Err(e(anyhow!(
-                    "error setting {name} using safetensor data: {err}",
-                )));
-            }
-        }
-    }
+    load_data_from_safetensors(&mut varmap, safetensors).map_err(e)?;
 
     let context = tokenizer.encode("\n").map_err(e)?;
     let mut language_generator =

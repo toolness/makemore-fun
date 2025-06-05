@@ -12,12 +12,12 @@ use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
-use gpt_core::tokenizer::Tokenizer;
 use gpt_core::util::{count_params, print_gradient_info};
 use gpt_core::{
     language_model::{LanguageGenerator, language_loss},
     tokenizer::TOKENIZER_VOCABULARY_KEY,
 };
+use gpt_core::{tokenizer::Tokenizer, util::load_data_from_safetensors};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -103,19 +103,7 @@ fn main() -> Result<()> {
     println!("Parameters in model: {}", count_params(&varmap));
 
     if let Some(data) = safetensors {
-        // This is mostly what VarMap::load() does, only we've already got thee
-        // safetensors file loaded already, so we're just going to populate the
-        // model params from it.
-        let mut tensor_data = varmap.data().lock().unwrap();
-        for (name, var) in tensor_data.iter_mut() {
-            let data = data.load(name, var.device())?;
-            if let Err(err) = var.set(&data) {
-                return Err(anyhow!(
-                    "error setting {name} using data from {:?}: {err}",
-                    args.load
-                ));
-            }
-        }
+        load_data_from_safetensors(&mut varmap, data)?;
     }
 
     if args.vars {

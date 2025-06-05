@@ -1,7 +1,11 @@
 use std::ops::Deref;
 
-use anyhow::Result;
-use candle_core::{Tensor, backprop::GradStore};
+use anyhow::{Result, anyhow};
+use candle_core::{
+    Device, Tensor,
+    backprop::GradStore,
+    safetensors::{MmapedSafetensors, SliceSafetensors},
+};
 use candle_nn::VarMap;
 use rand::{
     distr::{Distribution, weighted::WeightedIndex},
@@ -64,6 +68,40 @@ pub fn print_gradient_info(varmap: &VarMap, gradients: &GradStore) -> Result<()>
             }
         } else {
             println!("⚠️  WARNING: No gradient for {name}!");
+        }
+    }
+    Ok(())
+}
+
+/// Ideally this would be a trait supported by all the
+/// safetensors structs in candle.
+pub trait SafetensorLoader {
+    fn load_tensor(&self, name: &str, dev: &Device) -> candle_core::Result<Tensor>;
+}
+
+impl SafetensorLoader for MmapedSafetensors {
+    fn load_tensor(&self, name: &str, dev: &Device) -> candle_core::Result<Tensor> {
+        self.load(name, dev)
+    }
+}
+
+impl<'a> SafetensorLoader for SliceSafetensors<'a> {
+    fn load_tensor(&self, name: &str, dev: &Device) -> candle_core::Result<Tensor> {
+        self.load(name, dev)
+    }
+}
+
+pub fn load_data_from_safetensors<T: SafetensorLoader>(
+    varmap: &mut VarMap,
+    safetensors: T,
+) -> Result<()> {
+    // This is mostly what VarMap::load() does, but that method is specific to
+    // loading data from a file, while this isn't.
+    let mut tensor_data = varmap.data().lock().unwrap();
+    for (name, var) in tensor_data.iter_mut() {
+        let data = safetensors.load_tensor(name, var.device())?;
+        if let Err(err) = var.set(&data) {
+            return Err(anyhow!("error setting {name} using safetensor data: {err}",));
         }
     }
     Ok(())
