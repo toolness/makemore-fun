@@ -7,9 +7,9 @@ To build the web version:
 ```
 cargo install wasm-pack
 cargo install basic-http-server
-wasm-pack build web --target web
-cd web
+cargo run --release -- --save=boop
+RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build web --target web
 basic-http-server
 ```
 
-Then go to http://localhost:4000.
+Then go to http://localhost:4000/web/.
