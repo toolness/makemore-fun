@@ -1,5 +1,4 @@
 *.safetensors
-!web/weights/*.safetensors
 !web/public/weights/*.safetensors
 target
 web/pkg
