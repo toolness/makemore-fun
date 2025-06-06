@@ -25,6 +25,15 @@ npm run dev
 
 Then go to http://localhost:5173/.
 
+## Web deployment
+
+This will build and deploy the web version to GitHub pages under
+the `/makemore-fun/` subdirectory.
+
+```
+npm run deploy
+```
+
 ## Credits
 
 Tiny shakespeare is taken from:
