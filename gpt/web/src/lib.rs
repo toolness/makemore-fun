@@ -18,10 +18,7 @@ pub fn generate(
 ) -> Result<String, JsError> {
     let device = Device::Cpu;
     let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8)?;
-
-    // TODO: `BUFFER.tokenizer_vocabulary` should be a const in gpt-core
     let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
-
     let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
     let vocab_size = tokenizer.len();
     let mut varmap = VarMap::new();
