@@ -99,7 +99,7 @@ impl SafetensorLoader for BufferedSafetensors {
 
 pub fn load_data_from_safetensors<T: SafetensorLoader>(
     varmap: &mut VarMap,
-    safetensors: T,
+    safetensors: &T,
 ) -> Result<()> {
     // This is mostly what VarMap::load() does, but that method is specific to
     // loading data from a file, while this isn't.

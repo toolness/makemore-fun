@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
-use candle_core::{DType, Device};
-use candle_nn::{Module, VarBuilder, VarMap};
+use candle_core::{DType, Device, safetensors::BufferedSafetensors};
+use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
@@ -13,13 +11,14 @@ use rand::{SeedableRng, rngs::StdRng};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub struct LanguageModel {
-    module: Arc<Box<dyn Module>>,
-    tokenizer: Arc<Tokenizer>,
+pub struct WasmLanguageModel {
+    safetensors: BufferedSafetensors,
+    builder: LanguageModelBuilder,
+    tokenizer: Tokenizer,
 }
 
 #[wasm_bindgen]
-impl LanguageModel {
+impl WasmLanguageModel {
     #[wasm_bindgen]
     pub fn bigram(safetensors_u8: &[u8]) -> Result<Self, JsError> {
         Self::load_safetensors_and_build(safetensors_u8, |vocab_size| {
@@ -57,15 +56,81 @@ impl LanguageModel {
             candle_core::safetensors::BufferedSafetensors::new(safetensors_u8.into())?;
         let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
         let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
+        let builder = factory(tokenizer.len());
+        Ok(Self {
+            safetensors,
+            builder,
+            tokenizer,
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn create_generator(
+        &self,
+        seed: u64,
+        temperature: f32,
+        initial_context: &str,
+    ) -> Result<WasmLanguageGenerator, JsError> {
+        // TODO: we need to get this from the model somehow, maybe make a trait?
+        let block_size = 8;
+
+        let device = Device::Cpu;
         let mut varmap = VarMap::new();
-        let module = factory(tokenizer.len())
+        let model = self
+            .builder
+            .clone()
             .build_no_grad(&varmap, &device)
             .map_err(e)?;
-        load_data_from_safetensors(&mut varmap, safetensors).map_err(e)?;
-        Ok(Self {
-            module: Arc::new(module),
-            tokenizer: Arc::new(tokenizer),
-        })
+
+        load_data_from_safetensors(&mut varmap, &self.safetensors).map_err(e)?;
+
+        let context = self.tokenizer.encode(initial_context).map_err(e)?;
+        let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
+        Ok(WasmLanguageGenerator::create(
+            seed,
+            temperature,
+            generator,
+            self.tokenizer.clone(),
+        ))
+    }
+}
+
+#[wasm_bindgen]
+pub struct WasmLanguageGenerator {
+    rng: StdRng,
+    temperature: f32,
+    generator: LanguageGenerator,
+    tokenizer: Tokenizer,
+    device: Device,
+}
+
+#[wasm_bindgen]
+impl WasmLanguageGenerator {
+    fn create(
+        seed: u64,
+        temperature: f32,
+        generator: LanguageGenerator,
+        tokenizer: Tokenizer,
+    ) -> Self {
+        Self {
+            rng: StdRng::seed_from_u64(seed),
+            temperature,
+            generator,
+            tokenizer,
+            device: Device::Cpu,
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn next_token(&mut self) -> Result<char, JsError> {
+        self.generator
+            .next_char(
+                &mut self.rng,
+                &self.tokenizer,
+                self.temperature,
+                &self.device,
+            )
+            .map_err(e)
     }
 }
 
@@ -99,7 +164,7 @@ pub fn generate(
     )
     .map_err(e)?;
 
-    load_data_from_safetensors(&mut varmap, safetensors).map_err(e)?;
+    load_data_from_safetensors(&mut varmap, &safetensors).map_err(e)?;
 
     let context = tokenizer.encode("\n").map_err(e)?;
     let mut language_generator =

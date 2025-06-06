@@ -103,7 +103,7 @@ fn main() -> Result<()> {
     println!("Parameters in model: {}", count_params(&varmap));
 
     if let Some(data) = safetensors {
-        load_data_from_safetensors(&mut varmap, data)?;
+        load_data_from_safetensors(&mut varmap, &data)?;
     }
 
     if args.vars {

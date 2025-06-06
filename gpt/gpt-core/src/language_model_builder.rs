@@ -9,6 +9,7 @@ use crate::{
     transformer_language_model::{TransformerLanguageModel, TransformerLanguageModelOptions},
 };
 
+#[derive(Copy, Clone)]
 pub enum LanguageModelBuilder {
     Bigram(usize),
     Transformer(TransformerLanguageModelOptions),

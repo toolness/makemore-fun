@@ -264,6 +264,7 @@ pub struct TransformerLanguageModel {
     language_head: Linear,
 }
 
+#[derive(Copy, Clone)]
 pub struct TransformerLanguageModelOptions {
     pub n_embed: usize,
     pub block_size: usize,
