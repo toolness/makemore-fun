@@ -29,7 +29,7 @@ async function run() {
   // modes
   await init();
 
-  const stuff = await fetch("boop.safetensors");
+  const stuff = await fetch("weights/default-tiny-shakespeare.safetensors");
 
   const uint8Array = new Uint8Array(await stuff.arrayBuffer());
 
