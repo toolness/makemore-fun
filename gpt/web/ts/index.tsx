@@ -1,5 +1,9 @@
 import init, { generate } from "../pkg/web.js";
 
+import { createRoot } from 'react-dom/client';
+
+import React from "react";
+
 async function run() {
   // First up we need to actually load the Wasm file, so we use the
   // default export to inform it where the Wasm file is located on the
@@ -34,7 +38,10 @@ async function run() {
   const uint8Array = new Uint8Array(await stuff.arrayBuffer());
 
   const text = generate(uint8Array, 500, 1.0, BigInt(Date.now()));
-  console.log(text);
+
+  const root = createRoot(document.getElementById("app")!);
+
+  root.render(<pre>{text}</pre>);
 }
 
 run();
