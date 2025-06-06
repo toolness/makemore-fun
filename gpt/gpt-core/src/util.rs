@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow};
 use candle_core::{
     Device, Tensor,
     backprop::GradStore,
-    safetensors::{MmapedSafetensors, SliceSafetensors},
+    safetensors::{BufferedSafetensors, MmapedSafetensors, SliceSafetensors},
 };
 use candle_nn::VarMap;
 use rand::{
@@ -86,6 +86,12 @@ impl SafetensorLoader for MmapedSafetensors {
 }
 
 impl<'a> SafetensorLoader for SliceSafetensors<'a> {
+    fn load_tensor(&self, name: &str, dev: &Device) -> candle_core::Result<Tensor> {
+        self.load(name, dev)
+    }
+}
+
+impl SafetensorLoader for BufferedSafetensors {
     fn load_tensor(&self, name: &str, dev: &Device) -> candle_core::Result<Tensor> {
         self.load(name, dev)
     }
