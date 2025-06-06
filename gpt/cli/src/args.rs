@@ -1,12 +1,7 @@
-use std::collections::HashMap;
-
 use crate::device::Device;
-use anyhow::Result;
-use candle_core::{DType, Tensor};
-use candle_nn::{Module, VarBuilder, VarMap};
 use clap::{Parser, ValueEnum};
-use gpt_core::bigram_language_model::BigramLanguageModel;
-use gpt_core::transformer_language_model::TransformerLanguageModel;
+use gpt_core::language_model_builder::LanguageModelBuilder;
+use gpt_core::transformer_language_model::TransformerLanguageModelOptions;
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
@@ -88,40 +83,19 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn create_model(&self, vocab_size: usize, vb: VarBuilder) -> Result<Box<dyn Module>> {
+    pub fn language_model_builder(&self, vocab_size: usize) -> LanguageModelBuilder {
         match self.model {
-            Model::Bigram => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
-            Model::Transformer => Ok(Box::new(TransformerLanguageModel::new(
-                self.embedding_dims,
-                self.block_size,
-                self.layers,
-                self.heads,
-                vocab_size,
-                self.dropout,
-                vb,
-            )?)),
+            Model::Bigram => LanguageModelBuilder::Bigram(vocab_size),
+            Model::Transformer => {
+                LanguageModelBuilder::Transformer(TransformerLanguageModelOptions {
+                    n_embed: self.embedding_dims,
+                    block_size: self.block_size,
+                    num_layers: self.layers,
+                    num_heads: self.heads,
+                    vocab_size,
+                    drop_p: self.dropout,
+                })
+            }
         }
-    }
-
-    pub fn create_model_no_grad(
-        &self,
-        vocab_size: usize,
-        varmap: &VarMap,
-        device: &candle_core::Device,
-    ) -> Result<Box<dyn Module>> {
-        // "Freeze" the varmap as detached tensors to ensure that gradients aren't calculated
-        // for our parameters. While this doesn't actually seem to improve performance, it _does_
-        // seem to result in better training, since our evals don't mess with our optimizer: when
-        // running with `--epochs=5000 --lr=1e-3 --blocks=1` the loss improves from 2.193 to 2.179
-        // when using the no-gradient variant of the model for evals.
-        let varmap_data = varmap.data().lock().unwrap();
-        let mut detached_vars: HashMap<String, Tensor> = HashMap::with_capacity(varmap_data.len());
-        for (path, var) in varmap_data.iter() {
-            detached_vars.insert(path.clone(), var.as_detached_tensor());
-        }
-        self.create_model(
-            vocab_size,
-            VarBuilder::from_tensors(detached_vars, DType::F32, device),
-        )
     }
 }

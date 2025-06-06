@@ -3,7 +3,7 @@ use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
     tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
-    transformer_language_model::TransformerLanguageModel,
+    transformer_language_model::{TransformerLanguageModel, TransformerLanguageModelOptions},
     util::load_data_from_safetensors,
 };
 use rand::{SeedableRng, rngs::StdRng};
@@ -26,8 +26,18 @@ pub fn generate(
 
     // TODO: args should be passed in or pulled from safetensors.
     let block_size = 8;
-    let model =
-        TransformerLanguageModel::new(32, block_size, 1, 4, vocab_size, 0.0, vb).map_err(e)?;
+    let model = TransformerLanguageModel::new(
+        TransformerLanguageModelOptions {
+            n_embed: 32,
+            block_size,
+            num_layers: 1,
+            num_heads: 4,
+            vocab_size,
+            drop_p: 0.0,
+        },
+        vb,
+    )
+    .map_err(e)?;
 
     load_data_from_safetensors(&mut varmap, safetensors).map_err(e)?;
 

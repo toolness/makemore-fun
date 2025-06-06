@@ -264,16 +264,26 @@ pub struct TransformerLanguageModel {
     language_head: Linear,
 }
 
+pub struct TransformerLanguageModelOptions {
+    pub n_embed: usize,
+    pub block_size: usize,
+    pub num_layers: usize,
+    pub num_heads: usize,
+    pub vocab_size: usize,
+    pub drop_p: f32,
+}
+
 impl TransformerLanguageModel {
-    pub fn new(
-        n_embed: usize,
-        block_size: usize,
-        num_layers: usize,
-        num_heads: usize,
-        vocab_size: usize,
-        drop_p: f32,
-        vb: VarBuilder,
-    ) -> Result<Self> {
+    pub fn new(options: TransformerLanguageModelOptions, vb: VarBuilder) -> Result<Self> {
+        let TransformerLanguageModelOptions {
+            n_embed,
+            block_size,
+            num_layers,
+            num_heads,
+            vocab_size,
+            drop_p,
+        } = options;
+
         if num_heads <= 0 {
             return Err(anyhow!("must have a positive number of attention heads!"));
         }

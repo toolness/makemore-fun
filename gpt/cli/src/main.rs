@@ -98,7 +98,7 @@ fn main() -> Result<()> {
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
-    let model = args.create_model(vocab_size, vb)?;
+    let model = args.language_model_builder(vocab_size).build(vb)?;
 
     println!("Parameters in model: {}", count_params(&varmap));
 
@@ -129,7 +129,9 @@ fn main() -> Result<()> {
             "Initial".to_owned(),
             &mut rng,
             &multi_progress,
-            &args.create_model_no_grad(vocab_size, &varmap, &device)?,
+            &args
+                .language_model_builder(vocab_size)
+                .build_no_grad(&varmap, &device)?,
         )?;
         let mut optimizer = AdamW::new(
             varmap.all_vars(),
@@ -155,7 +157,9 @@ fn main() -> Result<()> {
                     format!("Epoch {i}"),
                     &mut rng,
                     &multi_progress,
-                    &args.create_model_no_grad(vocab_size, &varmap, &device)?,
+                    &args
+                        .language_model_builder(vocab_size)
+                        .build_no_grad(&varmap, &device)?,
                 )?;
             }
         }
@@ -190,7 +194,9 @@ fn main() -> Result<()> {
 
     if args.chars > 0 {
         let mut rng = StdRng::seed_from_u64(seed);
-        let model_no_grad = args.create_model_no_grad(vocab_size, &varmap, &device)?;
+        let model_no_grad = args
+            .language_model_builder(vocab_size)
+            .build_no_grad(&varmap, &device)?;
         print!("{}", args.context);
         let mut language_generator =
             LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
