@@ -1,47 +1,35 @@
-import init, { generate } from "../pkg/web.js";
+import { createRoot } from "react-dom/client";
 
-import { createRoot } from 'react-dom/client';
+import React, { useEffect, useState } from "react";
+import { GptMessage } from "./worker-types";
 
-import React from "react";
+const root = createRoot(document.getElementById("app")!);
 
-async function run() {
-  // First up we need to actually load the Wasm file, so we use the
-  // default export to inform it where the Wasm file is located on the
-  // server, and then we wait on the returned promise to wait for the
-  // Wasm to be loaded.
-  //
-  // It may look like this: `await init('./pkg/without_a_bundler_bg.wasm');`,
-  // but there is also a handy default inside `init` function, which uses
-  // `import.meta` to locate the Wasm file relatively to js file.
-  //
-  // Note that instead of a string you can also pass in any of the
-  // following things:
-  //
-  // * `WebAssembly.Module`
-  //
-  // * `ArrayBuffer`
-  //
-  // * `Response`
-  //
-  // * `Promise` which returns any of the above, e.g. `fetch("./path/to/wasm")`
-  //
-  // This gives you complete control over how the module is loaded
-  // and compiled.
-  //
-  // Also note that the promise, when resolved, yields the Wasm module's
-  // exports which is the same as importing the `*_bg` module in other
-  // modes
-  await init();
+root.render(<App />);
 
-  const stuff = await fetch("weights/default-tiny-shakespeare.safetensors");
+const worker = new Worker(new URL('worker.js', import.meta.url), {
+  type: "module"
+});
 
-  const uint8Array = new Uint8Array(await stuff.arrayBuffer());
+function App() {
+  const [output, setOutput] = useState("LOADING");
 
-  const text = generate(uint8Array, 500, 1.0, BigInt(Date.now()));
+  useEffect(() => {
+    const handler = (e: MessageEvent<GptMessage>) => {
+      if (e.data.type === "output") {
+        setOutput(e.data.text);
+      }
+    };
+    worker.addEventListener("message", handler);
 
-  const root = createRoot(document.getElementById("app")!);
+    worker.postMessage({
+      type: "generate"
+    } satisfies GptMessage);
 
-  root.render(<pre>{text}</pre>);
+    return () => {
+      worker.removeEventListener("message", handler);
+    }
+  }, []);
+
+  return <pre>{output}</pre>;
 }
-
-run();

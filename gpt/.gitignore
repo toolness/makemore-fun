@@ -3,5 +3,6 @@
 target
 web/pkg
 web/ts/*.js
+web/ts/*.jsx
 web/node_modules
 web/dist
