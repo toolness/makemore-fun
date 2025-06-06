@@ -10,13 +10,11 @@ cargo install wasm-pack
 # https://github.com/rust-random/getrandom/issues/208#issuecomment-2944376492
 cargo install wasm-bindgen-cli
 
-cargo install basic-http-server
-cargo run --release -- --save=boop
+cargo run --release -- --save=web/boop
 cd web
 npm install
-npm run build
-cd ..
-basic-http-server
+npm run wasm
+npm run dev
 ```
 
-Then go to http://localhost:4000/web/.
+Then go to http://localhost:5173/.
