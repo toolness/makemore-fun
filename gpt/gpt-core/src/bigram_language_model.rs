@@ -2,7 +2,6 @@ use anyhow::Result;
 use candle_core::Tensor;
 use candle_nn::{Embedding, Module, VarBuilder};
 
-#[derive(Clone)]
 pub struct BigramLanguageModel {
     token_embedding_table: Embedding,
 }
