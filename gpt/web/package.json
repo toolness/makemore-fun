@@ -4,13 +4,14 @@
   "main": "index.js",
   "scripts": {
     "wasm": "wasm-pack build --target web",
-    "watch": "tsc --watch",
-    "build": "npm run wasm && tsc"
+    "dev": "vite",
+    "build": "npm run wasm && tsc && vite build"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
   }
 }
