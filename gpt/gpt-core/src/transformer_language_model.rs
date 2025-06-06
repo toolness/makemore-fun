@@ -3,7 +3,7 @@ use core::f32;
 use anyhow::{Result, anyhow};
 use candle_core::{D, DType, IndexOp, Tensor};
 use candle_nn::{
-    Embedding, Linear, Module, Sequential, VarBuilder,
+    Embedding, Linear, Module, VarBuilder,
     ops::{dropout, softmax},
 };
 
@@ -23,6 +23,7 @@ const FEED_FORWARD_OUTPUT_DIMS: usize = 4;
 ///
 ///   * If `drop_p` is zero, we disable dropout completely, which means
 ///     there's no efficiency penalty.
+#[derive(Clone)]
 struct Dropout {
     drop_p: f32,
 }
@@ -47,6 +48,7 @@ impl Module for Dropout {
 
 /// We're implementing our own layer norm because Candle's built-in one doesn't
 /// seem to support backprop: https://github.com/huggingface/candle/issues/2977
+#[derive(Clone)]
 struct LayerNorm {
     weight: Tensor,
     bias: Tensor,
@@ -77,6 +79,7 @@ impl Module for LayerNorm {
     }
 }
 
+#[derive(Clone)]
 struct AttentionHead {
     key: Linear,
     query: Linear,
@@ -144,6 +147,7 @@ impl Module for AttentionHead {
     }
 }
 
+#[derive(Clone)]
 struct MultiAttentionHead {
     heads: Vec<AttentionHead>,
     proj: Linear,
@@ -194,6 +198,7 @@ impl Module for MultiAttentionHead {
     }
 }
 
+#[derive(Clone)]
 pub struct FeedForward {
     ff: Linear,
     proj: Linear,
@@ -218,6 +223,7 @@ impl Module for FeedForward {
     }
 }
 
+#[derive(Clone)]
 pub struct Block {
     sa_heads: MultiAttentionHead,
     feed_forward: FeedForward,
@@ -255,11 +261,29 @@ impl Module for Block {
     }
 }
 
+/// Layers of blocks. We could use candle_nn::Sequential for this, but we want
+/// it to be cloneable so we're just going to roll our own.
+#[derive(Clone)]
+pub struct BlockLayers {
+    layers: Vec<Block>,
+}
+
+impl Module for BlockLayers {
+    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let mut xs = xs.clone();
+        for layer in self.layers.iter() {
+            xs = layer.forward(&xs)?
+        }
+        Ok(xs)
+    }
+}
+
+#[derive(Clone)]
 pub struct TransformerLanguageModel {
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
     positions: Tensor,
-    blocks: Sequential,
+    blocks: BlockLayers,
     layer_norm: LayerNorm,
     language_head: Linear,
 }
@@ -299,16 +323,19 @@ impl TransformerLanguageModel {
         let position_embedding_table =
             candle_nn::embedding(block_size, n_embed, vb.pp("position_embedding_table"))?;
         let positions = Tensor::arange(0 as u32, block_size as u32, device)?;
-        let mut blocks = candle_nn::seq();
-        for i in 0..num_layers {
-            blocks = blocks.add(Block::new(
-                n_embed,
-                block_size,
-                num_heads,
-                drop_p,
-                vb.pp(format!("block{i}")),
-            )?);
-        }
+        let blocks = BlockLayers {
+            layers: (0..num_layers)
+                .map(|i| {
+                    Block::new(
+                        n_embed,
+                        block_size,
+                        num_heads,
+                        drop_p,
+                        vb.pp(format!("block{i}")),
+                    )
+                })
+                .collect::<Result<Vec<Block>>>()?,
+        };
         let layer_norm = LayerNorm::new(n_embed, vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(n_embed, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
