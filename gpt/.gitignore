@@ -1,0 +1,7 @@
+*.safetensors
+!web/public/weights/*.safetensors
+target
+web/pkg
+web/ts/*.js
+web/node_modules
+web/dist
