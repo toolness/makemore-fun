@@ -1,13 +1,73 @@
+use std::sync::Arc;
+
 use candle_core::{DType, Device};
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::{Module, VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
+    language_model_builder::LanguageModelBuilder,
     tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
     transformer_language_model::{TransformerLanguageModel, TransformerLanguageModelOptions},
     util::load_data_from_safetensors,
 };
 use rand::{SeedableRng, rngs::StdRng};
 use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+pub struct LanguageModel {
+    module: Arc<Box<dyn Module>>,
+    tokenizer: Arc<Tokenizer>,
+}
+
+#[wasm_bindgen]
+impl LanguageModel {
+    #[wasm_bindgen]
+    pub fn bigram(safetensors_u8: &[u8]) -> Result<Self, JsError> {
+        Self::load_safetensors_and_build(safetensors_u8, |vocab_size| {
+            LanguageModelBuilder::Bigram(vocab_size)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn transformer(
+        n_embed: usize,
+        block_size: usize,
+        num_layers: usize,
+        num_heads: usize,
+        drop_p: f32,
+        safetensors_u8: &[u8],
+    ) -> Result<Self, JsError> {
+        Self::load_safetensors_and_build(safetensors_u8, |vocab_size| {
+            LanguageModelBuilder::Transformer(TransformerLanguageModelOptions {
+                n_embed,
+                block_size,
+                num_layers,
+                num_heads,
+                vocab_size,
+                drop_p,
+            })
+        })
+    }
+
+    fn load_safetensors_and_build<F>(safetensors_u8: &[u8], factory: F) -> Result<Self, JsError>
+    where
+        F: FnOnce(usize) -> LanguageModelBuilder,
+    {
+        let device = Device::Cpu;
+        let safetensors =
+            candle_core::safetensors::BufferedSafetensors::new(safetensors_u8.into())?;
+        let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
+        let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
+        let mut varmap = VarMap::new();
+        let module = factory(tokenizer.len())
+            .build_no_grad(&varmap, &device)
+            .map_err(e)?;
+        load_data_from_safetensors(&mut varmap, safetensors).map_err(e)?;
+        Ok(Self {
+            module: Arc::new(module),
+            tokenizer: Arc::new(tokenizer),
+        })
+    }
+}
 
 #[wasm_bindgen]
 pub fn generate(
