@@ -13,6 +13,7 @@ cargo install wasm-bindgen-cli
 cargo install basic-http-server
 cargo run --release -- --save=boop
 cd web
+npm install
 npm run build
 cd ..
 basic-http-server
