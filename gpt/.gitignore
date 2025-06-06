@@ -1,4 +1,5 @@
 *.safetensors
+!web/weights/*.safetensors
 target
 web/pkg
 web/ts/*.js
