@@ -12,7 +12,9 @@ cargo install wasm-bindgen-cli
 
 cargo install basic-http-server
 cargo run --release -- --save=boop
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack build web --target web
+cd web
+npm run build
+cd ..
 basic-http-server
 ```
 

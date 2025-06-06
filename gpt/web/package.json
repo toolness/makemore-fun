@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "wasm": "wasm-pack build --target web",
+    "watch": "tsc --watch",
+    "build": "npm run wasm && tsc"
   },
   "author": "",
   "license": "ISC",
