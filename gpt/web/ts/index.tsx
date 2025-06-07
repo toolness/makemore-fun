@@ -1,11 +1,60 @@
 import { createRoot } from "react-dom/client"
 
 import React, { useEffect, useMemo, useState } from "react"
-import { GptMessage } from "./worker-types"
+import { GptMessage, ModelInfo } from "./worker-types"
 
 const root = createRoot(document.getElementById("app")!)
 
 root.render(<App />)
+
+interface ModelChoice {
+    title: string
+    description: React.ReactNode
+    params: ModelInfo
+}
+
+const MODEL_CHOICES: ModelChoice[] = [
+    {
+        title: "Untrained bigram",
+        description: <p>Cool</p>,
+        params: {
+            type: "bigram",
+            url: absoluteUrl("/weights/garbage.safetensors"),
+        },
+    },
+    {
+        title: "Trained bigram",
+        description: <p>Cool</p>,
+        params: {
+            type: "bigram",
+            url: absoluteUrl("/weights/bigram.safetensors"),
+        },
+    },
+    {
+        title: "Tiny transformer",
+        description: <p>Cool</p>,
+        params: {
+            type: "transformer",
+            url: absoluteUrl("/weights/default-tiny-shakespeare.safetensors"),
+            n_embed: 32,
+            block_size: 8,
+            num_layers: 1,
+            num_heads: 4,
+        },
+    },
+    {
+        title: "Small transformer",
+        description: <p>Cool</p>,
+        params: {
+            type: "transformer",
+            url: absoluteUrl("/weights/massive.safetensors"),
+            n_embed: 192,
+            block_size: 128,
+            num_layers: 6,
+            num_heads: 6,
+        },
+    },
+]
 
 function App() {
     const [output, setOutput] = useState("LOADING")
@@ -30,16 +79,7 @@ function App() {
             type: "generate",
             chars: 500,
             initialContext: "\n",
-            model: {
-                type: "transformer",
-                url: getUrl(
-                    "/weights/default-tiny-shakespeare.safetensors"
-                ).toString(),
-                n_embed: 32,
-                block_size: 8,
-                num_layers: 1,
-                num_heads: 4,
-            },
+            model: MODEL_CHOICES[2].params,
         } satisfies GptMessage)
 
         return () => {
@@ -50,8 +90,8 @@ function App() {
     return <pre>{output}</pre>
 }
 
-function getUrl(path: string): URL {
+function absoluteUrl(path: string): string {
     const baseUrl = import.meta.env.BASE_URL
     const rootUrl = new URL(baseUrl, import.meta.url)
-    return new URL(path.slice(1), rootUrl)
+    return new URL(path.slice(1), rootUrl).toString()
 }
