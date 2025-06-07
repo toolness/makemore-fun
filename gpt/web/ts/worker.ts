@@ -1,7 +1,7 @@
 import init, { WasmLanguageModel } from "../pkg/web.js";
 import { GptMessage } from "./worker-types.js";
 
-async function run() {
+async function generate() {
   await init();
 
   const safetensors = await fetch(
@@ -9,23 +9,21 @@ async function run() {
   );
   const safetensorsU8 = new Uint8Array(await safetensors.arrayBuffer());
   const model = WasmLanguageModel.transformer(32, 8, 1, 4, 0.0, safetensorsU8);
-  const generator = model.create_generator(BigInt(Date.now()), 1.0, "\n");
+  let text = "\n";
+  const generator = model.create_generator(BigInt(Date.now()), 1.0, text);
 
-  const chars: string[] = []
   for (let i = 0; i < 500; i++) {
-    chars.push(generator.next_token());
-  }
-
-  return chars.join("");
-}
-
-onmessage = async (e: MessageEvent<GptMessage>) => {
-  if (e.data.type === "generate") {
-    const text = await run();
+    text += generator.next_token();
     postGptMessage({
       type: "output",
       text,
     });
+  }
+}
+
+onmessage = async (e: MessageEvent<GptMessage>) => {
+  if (e.data.type === "generate") {
+    generate();
   }
 };
 
