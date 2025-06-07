@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { GptMessage, ModelInfo } from "./worker-types"
 
 const root = createRoot(document.getElementById("app")!)
@@ -16,7 +16,12 @@ interface ModelChoice {
 const MODEL_CHOICES: ModelChoice[] = [
     {
         title: "Untrained bigram",
-        description: <p>Cool</p>,
+        description: (
+            <p>
+                Every neural net starts out untrained and produces utter
+                garbage. This is what it looks like.
+            </p>
+        ),
         params: {
             type: "bigram",
             url: absoluteUrl("/weights/garbage.safetensors"),
@@ -24,7 +29,14 @@ const MODEL_CHOICES: ModelChoice[] = [
     },
     {
         title: "Trained bigram",
-        description: <p>Cool</p>,
+        description: (
+            <p>
+                This is a simple trained bigram model. Each character is based
+                solely on the one before it, so it's not very effective. But it
+                does only have a few thousand parameters that only took about
+                one second to train.
+            </p>
+        ),
         params: {
             type: "bigram",
             url: absoluteUrl("/weights/bigram.safetensors"),
@@ -32,7 +44,20 @@ const MODEL_CHOICES: ModelChoice[] = [
     },
     {
         title: "Tiny transformer",
-        description: <p>Cool</p>,
+        description: (
+            <>
+                <p>
+                    This is a very small transformer model. Each character is
+                    based on the 8 that came before it. It only has one
+                    self-attention/feed-forward layer, which makes it better
+                    than the bigram model, but it's still gibberish.
+                </p>
+                <p>
+                    It has about 17,000 parameters and took around 10 seconds to
+                    train.
+                </p>
+            </>
+        ),
         params: {
             type: "transformer",
             url: absoluteUrl("/weights/default-tiny-shakespeare.safetensors"),
@@ -43,8 +68,19 @@ const MODEL_CHOICES: ModelChoice[] = [
         },
     },
     {
-        title: "Small transformer",
-        description: <p>Cool</p>,
+        title: "Medium transformer",
+        description: (
+            <>
+                <p>
+                    This is a larger transformer model that outputs mostly
+                    English, although it's still nonsensical.
+                </p>
+                <p>
+                    It has about 2.7 million parameters and took 12 minutes to
+                    train on a RTX 3080.
+                </p>
+            </>
+        ),
         params: {
             type: "transformer",
             url: absoluteUrl("/weights/massive.safetensors"),
@@ -57,15 +93,70 @@ const MODEL_CHOICES: ModelChoice[] = [
 ]
 
 function App() {
-    const [output, setOutput] = useState("LOADING")
+    return (
+        <div>
+            <h1>Language model fun</h1>
+            <p>
+                This is Atul's attempt to make a GPT transformer model based on
+                Andrej Karpathy's{" "}
+                <a
+                    href="https://www.youtube.com/watch?v=kCc8FmEb1nY"
+                    target="blank"
+                >
+                    Let's build GPT: from scratch, in code, spelled out
+                </a>
+                .
+            </p>
+            {MODEL_CHOICES.map((choice, i) => (
+                <ModelChoice key={i} choice={choice} />
+            ))}
+        </div>
+    )
+}
 
-    const worker = useMemo(() => {
-        return new Worker(new URL("worker.ts", import.meta.url), {
-            type: "module",
-        })
-    }, [])
+function ModelChoice(props: { choice: ModelChoice }) {
+    const { choice } = props
+    const [genKey, setGenKey] = useState<number | undefined>()
+
+    return (
+        <div>
+            <h2>{choice.title} model</h2>
+            {choice.description}
+            {genKey === undefined ? (
+                <button onClick={() => setGenKey(0)}>Try it</button>
+            ) : (
+                <div style={{ minHeight: "30em" }}>
+                    <button onClick={() => setGenKey(genKey + 1)}>
+                        Try again
+                    </button>{" "}
+                    <button onClick={() => setGenKey(undefined)}>Abort</button>
+                    <Generate
+                        key={genKey}
+                        chars={500}
+                        temperature={1.0}
+                        initialContext=""
+                        model={choice.params}
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
+
+function Generate(props: {
+    chars: number
+    temperature: number
+    initialContext: string
+    model: ModelInfo
+}) {
+    const { model, chars, temperature, initialContext } = props
+    const [output, setOutput] = useState("Loading...")
 
     useEffect(() => {
+        const worker = new Worker(new URL("worker.ts", import.meta.url), {
+            type: "module",
+        })
+
         const handler = (e: MessageEvent<GptMessage>) => {
             if (e.data.type === "output") {
                 setOutput(e.data.text)
@@ -77,16 +168,17 @@ function App() {
 
         worker.postMessage({
             type: "generate",
-            chars: 500,
-            temperature: 1.0,
-            initialContext: "\n",
-            model: MODEL_CHOICES[2].params,
+            chars,
+            temperature,
+            initialContext,
+            model,
         } satisfies GptMessage)
 
         return () => {
             worker.removeEventListener("message", handler)
+            worker.terminate()
         }
-    }, [])
+    }, [model, chars, temperature, initialContext])
 
     return <pre>{output}</pre>
 }
