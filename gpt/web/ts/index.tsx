@@ -107,6 +107,16 @@ function App() {
                 </a>
                 .
             </p>
+            <p>
+                All models were trained on{" "}
+                <a
+                    href="https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+                    target="blank"
+                >
+                    Tiny Shakespeare
+                </a>{" "}
+                and use individual characters for tokens.
+            </p>
             {MODEL_CHOICES.map((choice, i) => (
                 <ModelChoice key={i} choice={choice} />
             ))}
