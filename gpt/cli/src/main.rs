@@ -10,9 +10,12 @@ use std::{
 use anyhow::{Result, anyhow};
 use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
-use candle_nn::{AdamW, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
-use gpt_core::util::{count_params, print_gradient_info};
+use gpt_core::{
+    language_model::LanguageModel,
+    util::{count_params, print_gradient_info},
+};
 use gpt_core::{
     language_model::{LanguageGenerator, language_loss},
     tokenizer::TOKENIZER_VOCABULARY_KEY,
@@ -303,7 +306,7 @@ impl Trainer {
         prefix: String,
         rng: &mut StdRng,
         multi_progress: &MultiProgress,
-        model_no_grad: &Box<dyn Module>,
+        model_no_grad: &Box<dyn LanguageModel>,
     ) -> Result<()> {
         let estimate_dataset_loss = |training_set: TrainingSet, rng: &mut StdRng| -> Result<f32> {
             let mut losses = Vec::with_capacity(EVAL_ITERS);

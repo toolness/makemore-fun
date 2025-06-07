@@ -7,6 +7,8 @@ use candle_nn::{
     ops::{dropout, softmax},
 };
 
+use crate::language_model::LanguageModel;
+
 /// Epsilon for layer norm is what's added to the denominator
 /// to make sure it works when the variance is zero. This is just
 /// Pytorch's default.
@@ -256,6 +258,7 @@ impl Module for Block {
 }
 
 pub struct TransformerLanguageModel {
+    block_size: usize,
     token_embedding_table: Embedding,
     position_embedding_table: Embedding,
     positions: Tensor,
@@ -313,6 +316,7 @@ impl TransformerLanguageModel {
         let layer_norm = LayerNorm::new(n_embed, vb.pp("layer_norm"))?;
         let language_head = candle_nn::linear(n_embed, vocab_size, vb.pp("language_head"))?;
         Ok(Self {
+            block_size,
             token_embedding_table,
             position_embedding_table,
             positions,
@@ -335,5 +339,11 @@ impl Module for TransformerLanguageModel {
         let out = self.layer_norm.forward(&out)?;
         let logits = self.language_head.forward(&out)?;
         Ok(logits)
+    }
+}
+
+impl LanguageModel for TransformerLanguageModel {
+    fn block_size(&self) -> usize {
+        self.block_size
     }
 }

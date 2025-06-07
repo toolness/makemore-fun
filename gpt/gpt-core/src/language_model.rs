@@ -9,6 +9,10 @@ use crate::{
     util::{assert_equal_tensors, multinomial},
 };
 
+pub trait LanguageModel: Module {
+    fn block_size(&self) -> usize;
+}
+
 pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
     let (batch_size, block_size, vocab_size) = logits.dims3()?;
 
@@ -33,12 +37,12 @@ pub fn language_loss(logits: &Tensor, ys: &Tensor) -> Result<Tensor> {
 
 pub struct LanguageGenerator {
     context: Vec<u32>,
-    model: Box<dyn Module>,
+    model: Box<dyn LanguageModel>,
     block_size: usize,
 }
 
 impl LanguageGenerator {
-    pub fn new(context: &[u32], model: Box<dyn Module>, block_size: usize) -> Result<Self> {
+    pub fn new(context: &[u32], model: Box<dyn LanguageModel>, block_size: usize) -> Result<Self> {
         let context = context[context.len().saturating_sub(block_size)..].to_vec();
         Ok(Self {
             context,

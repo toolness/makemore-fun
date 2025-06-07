@@ -71,9 +71,6 @@ impl WasmLanguageModel {
         temperature: f32,
         initial_context: &str,
     ) -> Result<WasmLanguageGenerator, JsError> {
-        // TODO: we need to get this from the model somehow, maybe make a trait?
-        let block_size = 8;
-
         let device = Device::Cpu;
         let mut varmap = VarMap::new();
         let model = self
@@ -85,6 +82,7 @@ impl WasmLanguageModel {
         load_data_from_safetensors(&mut varmap, &self.safetensors).map_err(e)?;
 
         let context = self.tokenizer.encode(initial_context).map_err(e)?;
+        let block_size = model.block_size();
         let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
         Ok(WasmLanguageGenerator::create(
             seed,

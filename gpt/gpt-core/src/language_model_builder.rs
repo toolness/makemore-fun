@@ -2,10 +2,11 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use candle_core::{DType, Tensor};
-use candle_nn::{Module, VarBuilder, VarMap};
+use candle_nn::{VarBuilder, VarMap};
 
 use crate::{
     bigram_language_model::BigramLanguageModel,
+    language_model::LanguageModel,
     transformer_language_model::{TransformerLanguageModel, TransformerLanguageModelOptions},
 };
 
@@ -16,7 +17,7 @@ pub enum LanguageModelBuilder {
 }
 
 impl LanguageModelBuilder {
-    pub fn build(self, vb: VarBuilder) -> Result<Box<dyn Module>> {
+    pub fn build(self, vb: VarBuilder) -> Result<Box<dyn LanguageModel>> {
         match self {
             Self::Bigram(vocab_size) => Ok(Box::new(BigramLanguageModel::new(vocab_size, vb)?)),
             Self::Transformer(options) => Ok(Box::new(TransformerLanguageModel::new(options, vb)?)),
@@ -27,7 +28,7 @@ impl LanguageModelBuilder {
         self,
         varmap: &VarMap,
         device: &candle_core::Device,
-    ) -> Result<Box<dyn Module>> {
+    ) -> Result<Box<dyn LanguageModel>> {
         // "Freeze" the varmap as detached tensors to ensure that gradients aren't calculated
         // for our parameters. While this doesn't actually seem to improve performance, it _does_
         // seem to result in better training, since our evals don't mess with our optimizer: when
