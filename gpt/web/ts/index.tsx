@@ -78,6 +78,7 @@ function App() {
         worker.postMessage({
             type: "generate",
             chars: 500,
+            temperature: 1.0,
             initialContext: "\n",
             model: MODEL_CHOICES[2].params,
         } satisfies GptMessage)

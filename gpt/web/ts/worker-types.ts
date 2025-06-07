@@ -20,6 +20,7 @@ export interface GenerateMessage {
     type: "generate"
     model: ModelInfo
     chars: number
+    temperature: number
     initialContext: string
 }
 
