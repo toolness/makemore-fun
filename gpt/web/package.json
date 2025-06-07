@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "wasm": "wasm-pack build --target web",
+    "wasm": "wasm-pack build --target web --no-opt",
+    "wasm_prod": "wasm-pack build --target web",
     "dev": "vite",
-    "build": "npm run wasm && tsc && vite build --base /makemore-fun/",
+    "build": "npm run wasm_prod && tsc && vite build --base /makemore-fun/",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "author": "",
