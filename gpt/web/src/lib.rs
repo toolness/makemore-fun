@@ -1,10 +1,10 @@
-use candle_core::{DType, Device, safetensors::BufferedSafetensors};
+use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
     tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
-    transformer_language_model::{TransformerLanguageModel, TransformerLanguageModelOptions},
+    transformer_language_model::TransformerLanguageModelOptions,
     util::load_data_from_safetensors,
 };
 use rand::{SeedableRng, rngs::StdRng};
@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct WasmLanguageModel {
-    safetensors: BufferedSafetensors,
+    varmap: VarMap,
     builder: LanguageModelBuilder,
     tokenizer: Tokenizer,
 }
@@ -52,13 +52,18 @@ impl WasmLanguageModel {
         F: FnOnce(usize) -> LanguageModelBuilder,
     {
         let device = Device::Cpu;
-        let safetensors =
-            candle_core::safetensors::BufferedSafetensors::new(safetensors_u8.into())?;
+        let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8.into())?;
+        let mut varmap = VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
         let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
         let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
         let builder = factory(tokenizer.len());
+
+        builder.build(vb).map_err(e)?;
+        load_data_from_safetensors(&mut varmap, &safetensors).map_err(e)?;
+
         Ok(Self {
-            safetensors,
+            varmap,
             builder,
             tokenizer,
         })
@@ -72,14 +77,11 @@ impl WasmLanguageModel {
         initial_context: &str,
     ) -> Result<WasmLanguageGenerator, JsError> {
         let device = Device::Cpu;
-        let mut varmap = VarMap::new();
         let model = self
             .builder
             .clone()
-            .build_no_grad(&varmap, &device)
+            .build_no_grad(&self.varmap, &device)
             .map_err(e)?;
-
-        load_data_from_safetensors(&mut varmap, &self.safetensors).map_err(e)?;
 
         let context = self.tokenizer.encode(initial_context).map_err(e)?;
         let block_size = model.block_size();
@@ -139,40 +141,11 @@ pub fn generate(
     temperature: f32,
     seed: u64,
 ) -> Result<String, JsError> {
-    let device = Device::Cpu;
-    let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8)?;
-    let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
-    let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
-    let vocab_size = tokenizer.len();
-    let mut varmap = VarMap::new();
-    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-
-    // TODO: args should be passed in or pulled from safetensors.
-    let block_size = 8;
-    let model = TransformerLanguageModel::new(
-        TransformerLanguageModelOptions {
-            n_embed: 32,
-            block_size,
-            num_layers: 1,
-            num_heads: 4,
-            vocab_size,
-            drop_p: 0.0,
-        },
-        vb,
-    )
-    .map_err(e)?;
-
-    load_data_from_safetensors(&mut varmap, &safetensors).map_err(e)?;
-
-    let context = tokenizer.encode("\n").map_err(e)?;
-    let mut language_generator =
-        LanguageGenerator::new(&context, Box::new(model), block_size).map_err(e)?;
-    let mut rng = StdRng::seed_from_u64(seed);
+    let model = WasmLanguageModel::transformer(32, 8, 1, 4, 0.0, safetensors_u8)?;
+    let mut language_generator = model.create_generator(seed, temperature, "\n")?;
     let mut result = String::with_capacity(num_chars);
     for _ in 0..num_chars {
-        let char = language_generator
-            .next_char(&mut rng, &tokenizer, temperature, &device)
-            .map_err(e)?;
+        let char = language_generator.next_token()?;
         result.push(char);
     }
 
