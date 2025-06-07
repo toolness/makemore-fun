@@ -1,16 +1,22 @@
-import init, { generate } from "../pkg/web.js";
+import init, { WasmLanguageModel } from "../pkg/web.js";
 import { GptMessage } from "./worker-types.js";
 
 async function run() {
   await init();
 
-  const stuff = await fetch(getUrl("/weights/default-tiny-shakespeare.safetensors"));
+  const safetensors = await fetch(
+    getUrl("/weights/default-tiny-shakespeare.safetensors")
+  );
+  const safetensorsU8 = new Uint8Array(await safetensors.arrayBuffer());
+  const model = WasmLanguageModel.transformer(32, 8, 1, 4, 0.0, safetensorsU8);
+  const generator = model.create_generator(BigInt(Date.now()), 1.0, "\n");
 
-  const uint8Array = new Uint8Array(await stuff.arrayBuffer());
+  const chars: string[] = []
+  for (let i = 0; i < 500; i++) {
+    chars.push(generator.next_token());
+  }
 
-  const text = generate(uint8Array, 500, 1.0, BigInt(Date.now()));
-
-  return text;
+  return chars.join("");
 }
 
 onmessage = async (e: MessageEvent<GptMessage>) => {
@@ -18,17 +24,17 @@ onmessage = async (e: MessageEvent<GptMessage>) => {
     const text = await run();
     postGptMessage({
       type: "output",
-      text
-    })
+      text,
+    });
   }
-}
+};
 
 function postGptMessage(message: GptMessage) {
   postMessage(message);
 }
 
 function getUrl(path: string): URL {
-  const baseUrl = import.meta.env.BASE_URL
+  const baseUrl = import.meta.env.BASE_URL;
   const rootUrl = new URL(baseUrl, import.meta.url);
   return new URL(path.slice(1), rootUrl);
 }

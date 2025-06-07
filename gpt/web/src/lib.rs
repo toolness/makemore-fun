@@ -134,24 +134,6 @@ impl WasmLanguageGenerator {
     }
 }
 
-#[wasm_bindgen]
-pub fn generate(
-    safetensors_u8: &[u8],
-    num_chars: usize,
-    temperature: f32,
-    seed: u64,
-) -> Result<String, JsError> {
-    let model = WasmLanguageModel::transformer(32, 8, 1, 4, 0.0, safetensors_u8)?;
-    let mut language_generator = model.create_generator(seed, temperature, "\n")?;
-    let mut result = String::with_capacity(num_chars);
-    for _ in 0..num_chars {
-        let char = language_generator.next_token()?;
-        result.push(char);
-    }
-
-    Ok(result)
-}
-
 // https://github.com/rustwasm/wasm-bindgen/issues/2970#issuecomment-2347845445
 fn e(err: anyhow::Error) -> JsError {
     JsError::from(&*err)
