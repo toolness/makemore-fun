@@ -50,7 +50,9 @@ const MODEL_CHOICES: ModelChoice[] = [
                     This is a very small transformer model. Each character is
                     based on the 8 that came before it. It only has one
                     self-attention/feed-forward layer, which makes it better
-                    than the bigram model, but it's still gibberish.
+                    than the bigram model, but it's still gibberish--although
+                    its output is starting to look like <em>some</em> kind of
+                    language.
                 </p>
                 <p>
                     It has about 17,000 parameters and took around 10 seconds to
@@ -73,7 +75,9 @@ const MODEL_CHOICES: ModelChoice[] = [
             <>
                 <p>
                     This is a larger transformer model that outputs mostly
-                    English, although it's still nonsensical.
+                    English, although it's still nonsensical. It has six
+                    self-attention/feed-forward layers and each character is
+                    based on the 128 that preceded it.
                 </p>
                 <p>
                     It has about 2.7 million parameters and took 12 minutes to
