@@ -143,7 +143,7 @@ function ModelChoice(props: { choice: ModelChoice }) {
                     <button onClick={() => setGenKey(genKey + 1)}>
                         Try again
                     </button>{" "}
-                    <button onClick={() => setGenKey(undefined)}>Abort</button>
+                    <button onClick={() => setGenKey(undefined)}>Close</button>
                     <Generate
                         key={genKey}
                         chars={500}
