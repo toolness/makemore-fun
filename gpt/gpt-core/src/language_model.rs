@@ -43,7 +43,12 @@ pub struct LanguageGenerator {
 
 impl LanguageGenerator {
     pub fn new(context: &[u32], model: Box<dyn LanguageModel>, block_size: usize) -> Result<Self> {
-        let context = context[context.len().saturating_sub(block_size)..].to_vec();
+        let mut context = context[context.len().saturating_sub(block_size)..].to_vec();
+        if context.len() == 0 {
+            // We need to have *something* to predict the next token, so
+            // just add the first token in the vocabulary.
+            context.push(0);
+        }
         Ok(Self {
             context,
             model,

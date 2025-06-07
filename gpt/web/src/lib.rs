@@ -83,7 +83,7 @@ impl WasmLanguageModel {
             .build_no_grad(&self.varmap, &device)
             .map_err(e)?;
 
-        let context = self.tokenizer.encode(initial_context).map_err(e)?;
+        let context = self.tokenizer.encode_safe(initial_context);
         let block_size = model.block_size();
         let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
         Ok(WasmLanguageGenerator::create(

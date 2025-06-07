@@ -19,7 +19,8 @@ export type ModelInfo = BigramModelInfo | TransformerModelInfo
 export interface GenerateMessage {
     type: "generate",
     model: ModelInfo,
-    chars: number
+    chars: number,
+    initialContext: string,
 }
 
 export interface OutputMessage {

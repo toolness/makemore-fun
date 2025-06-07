@@ -9,7 +9,7 @@ async function generate(options: GenerateMessage) {
   const safetensors = await fetch(modelInfo.url);
   const safetensorsU8 = new Uint8Array(await safetensors.arrayBuffer());
   const model = createModel(safetensorsU8, modelInfo);
-  let text = "\n";
+  let text = options.initialContext;
   const generator = model.create_generator(BigInt(Date.now()), 1.0, text);
 
   for (let i = 0; i < options.chars; i++) {

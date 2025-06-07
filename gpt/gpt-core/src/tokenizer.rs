@@ -86,6 +86,20 @@ impl Tokenizer {
         Ok(result)
     }
 
+    /// Like `encode` but filters out any content that doesn't map to a
+    /// token in the vocabulary.
+    pub fn encode_safe<T: AsRef<str>>(&self, content: T) -> Vec<u32> {
+        let mut result = Vec::with_capacity(content.as_ref().len());
+
+        for char in content.as_ref().chars() {
+            if let Some(&token) = self.ctoi.get(&char) {
+                result.push(token);
+            };
+        }
+
+        result
+    }
+
     pub fn decode_char(&self, token: u32) -> Result<char> {
         let Some(&char) = self.itoc.get(&token) else {
             return Err(anyhow!("'{}' is not a valid token", token));

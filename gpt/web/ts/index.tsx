@@ -29,6 +29,7 @@ function App() {
     worker.postMessage({
       type: "generate",
       chars: 500,
+      initialContext: "\n",
       model: {
         type: "transformer",
         url: getUrl("/weights/default-tiny-shakespeare.safetensors").toString(),
