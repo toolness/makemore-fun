@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client"
 
 import React, { useEffect, useState } from "react"
 import { GptMessage, ModelInfo } from "./worker-types"
+import { NumberSlider } from "./number-slider"
 
 const root = createRoot(document.getElementById("app")!)
 
@@ -97,6 +98,9 @@ const MODEL_CHOICES: ModelChoice[] = [
 ]
 
 function App() {
+    const [temperature, setTemperature] = useState(1.0)
+    const [initialContext, setInitialContext] = useState("")
+
     return (
         <div>
             <h1>Language model fun</h1>
@@ -121,15 +125,57 @@ function App() {
                 </a>{" "}
                 and use individual characters for tokens.
             </p>
+            <details>
+                <summary
+                    style={{
+                        cursor: "pointer",
+                    }}
+                >
+                    Slightly advanced stuff
+                </summary>
+                <div style={{ paddingTop: 10 }}>
+                    <NumberSlider
+                        min={0}
+                        max={3}
+                        value={temperature}
+                        step={0.1}
+                        onChange={setTemperature}
+                        label="Temperature:"
+                    />
+                </div>
+                <div style={{ paddingTop: 10 }}>
+                    <label htmlFor="context">Initial context:</label>
+                    <textarea
+                        style={{
+                            display: "block",
+                            marginTop: 4,
+                            width: "10em",
+                            height: "4em",
+                            fontFamily: "monospace",
+                        }}
+                        value={initialContext}
+                        onChange={(e) => setInitialContext(e.target.value)}
+                    ></textarea>
+                </div>
+            </details>
             {MODEL_CHOICES.map((choice, i) => (
-                <ModelChoice key={i} choice={choice} />
+                <ModelChoice
+                    key={i}
+                    choice={choice}
+                    temperature={temperature}
+                    initialContext={initialContext}
+                />
             ))}
         </div>
     )
 }
 
-function ModelChoice(props: { choice: ModelChoice }) {
-    const { choice } = props
+function ModelChoice(props: {
+    choice: ModelChoice
+    temperature: number
+    initialContext: string
+}) {
+    const { choice, temperature, initialContext } = props
     const [genKey, setGenKey] = useState<number | undefined>()
 
     return (
@@ -147,8 +193,8 @@ function ModelChoice(props: { choice: ModelChoice }) {
                     <Generate
                         key={genKey}
                         chars={500}
-                        temperature={1.0}
-                        initialContext=""
+                        temperature={temperature}
+                        initialContext={initialContext}
                         model={choice.params}
                     />
                 </div>
