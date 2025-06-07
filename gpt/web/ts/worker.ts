@@ -10,14 +10,10 @@ async function generate(options: GenerateMessage) {
     const safetensorsU8 = new Uint8Array(await safetensors.arrayBuffer())
     const model = createModel(safetensorsU8, modelInfo)
     let text = options.initialContext
-    const generator = model.create_generator(
-        BigInt(Date.now()),
-        options.temperature,
-        text
-    )
+    const generator = model.create_generator(BigInt(Date.now()), text)
 
     for (let i = 0; i < options.chars; i++) {
-        text += generator.next_token()
+        text += generator.next_token(options.temperature)
         postGptMessage({
             type: "output",
             text,

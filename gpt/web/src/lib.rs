@@ -73,7 +73,6 @@ impl WasmLanguageModel {
     pub fn create_generator(
         &self,
         seed: u64,
-        temperature: f32,
         initial_context: &str,
     ) -> Result<WasmLanguageGenerator, JsError> {
         let device = Device::Cpu;
@@ -88,7 +87,6 @@ impl WasmLanguageModel {
         let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
         Ok(WasmLanguageGenerator::create(
             seed,
-            temperature,
             generator,
             self.tokenizer.clone(),
         ))
@@ -98,7 +96,6 @@ impl WasmLanguageModel {
 #[wasm_bindgen]
 pub struct WasmLanguageGenerator {
     rng: StdRng,
-    temperature: f32,
     generator: LanguageGenerator,
     tokenizer: Tokenizer,
     device: Device,
@@ -106,15 +103,9 @@ pub struct WasmLanguageGenerator {
 
 #[wasm_bindgen]
 impl WasmLanguageGenerator {
-    fn create(
-        seed: u64,
-        temperature: f32,
-        generator: LanguageGenerator,
-        tokenizer: Tokenizer,
-    ) -> Self {
+    fn create(seed: u64, generator: LanguageGenerator, tokenizer: Tokenizer) -> Self {
         Self {
             rng: StdRng::seed_from_u64(seed),
-            temperature,
             generator,
             tokenizer,
             device: Device::Cpu,
@@ -122,14 +113,9 @@ impl WasmLanguageGenerator {
     }
 
     #[wasm_bindgen]
-    pub fn next_token(&mut self) -> Result<char, JsError> {
+    pub fn next_token(&mut self, temperature: f32) -> Result<char, JsError> {
         self.generator
-            .next_char(
-                &mut self.rng,
-                &self.tokenizer,
-                self.temperature,
-                &self.device,
-            )
+            .next_char(&mut self.rng, &self.tokenizer, temperature, &self.device)
             .map_err(e)
     }
 }
