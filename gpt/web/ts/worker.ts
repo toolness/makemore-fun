@@ -19,6 +19,10 @@ async function generate(options: GenerateMessage) {
       text,
     });
   }
+
+  postGptMessage({
+    type: "done"
+  })
 }
 
 function createModel(

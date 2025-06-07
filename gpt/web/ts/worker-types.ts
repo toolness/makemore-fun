@@ -27,4 +27,8 @@ export interface OutputMessage {
     text: string
 }
 
-export type GptMessage = GenerateMessage | OutputMessage
+export interface DoneMessage {
+    type: "done",
+}
+
+export type GptMessage = GenerateMessage | OutputMessage | DoneMessage
