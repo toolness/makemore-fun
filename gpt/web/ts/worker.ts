@@ -1,18 +1,18 @@
 import init, { WasmLanguageModel } from "../pkg/web.js";
-import { GptMessage } from "./worker-types.js";
+import { GenerateMessage, GptMessage, ModelInfo } from "./worker-types.js";
 
-async function generate() {
+async function generate(options: GenerateMessage) {
+  const modelInfo = options.model;
+
   await init();
 
-  const safetensors = await fetch(
-    getUrl("/weights/default-tiny-shakespeare.safetensors")
-  );
+  const safetensors = await fetch(modelInfo.url);
   const safetensorsU8 = new Uint8Array(await safetensors.arrayBuffer());
-  const model = WasmLanguageModel.transformer(32, 8, 1, 4, 0.0, safetensorsU8);
+  const model = createModel(safetensorsU8, modelInfo);
   let text = "\n";
   const generator = model.create_generator(BigInt(Date.now()), 1.0, text);
 
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < options.chars; i++) {
     text += generator.next_token();
     postGptMessage({
       type: "output",
@@ -21,18 +21,32 @@ async function generate() {
   }
 }
 
+function createModel(
+  safetensors: Uint8Array,
+  modelInfo: ModelInfo
+): WasmLanguageModel {
+  switch (modelInfo.type) {
+    case "bigram":
+      return WasmLanguageModel.bigram(safetensors);
+
+    case "transformer":
+      return WasmLanguageModel.transformer(
+        modelInfo.n_embed,
+        modelInfo.block_size,
+        modelInfo.num_layers,
+        modelInfo.num_heads,
+        0.0,
+        safetensors
+      );
+  }
+}
+
 onmessage = async (e: MessageEvent<GptMessage>) => {
   if (e.data.type === "generate") {
-    generate();
+    generate(e.data);
   }
 };
 
 function postGptMessage(message: GptMessage) {
   postMessage(message);
-}
-
-function getUrl(path: string): URL {
-  const baseUrl = import.meta.env.BASE_URL;
-  const rootUrl = new URL(baseUrl, import.meta.url);
-  return new URL(path.slice(1), rootUrl);
 }

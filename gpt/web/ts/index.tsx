@@ -23,7 +23,16 @@ function App() {
     worker.addEventListener("message", handler);
 
     worker.postMessage({
-      type: "generate"
+      type: "generate",
+      chars: 500,
+      model: {
+        type: "transformer",
+        url: getUrl("/weights/default-tiny-shakespeare.safetensors").toString(),
+        n_embed: 32,
+        block_size: 8,
+        num_layers: 1,
+        num_heads: 4,
+      }
     } satisfies GptMessage);
 
     return () => {
@@ -32,4 +41,10 @@ function App() {
   }, []);
 
   return <pre>{output}</pre>;
+}
+
+function getUrl(path: string): URL {
+  const baseUrl = import.meta.env.BASE_URL;
+  const rootUrl = new URL(baseUrl, import.meta.url);
+  return new URL(path.slice(1), rootUrl);
 }
