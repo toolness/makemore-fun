@@ -7,29 +7,29 @@ interface BigramModelInfo extends BaseModelInfo {
 }
 
 interface TransformerModelInfo extends BaseModelInfo {
-    type: "transformer",
-    n_embed: number,
-    block_size: number,
-    num_layers: number,
-    num_heads: number,
+    type: "transformer"
+    n_embed: number
+    block_size: number
+    num_layers: number
+    num_heads: number
 }
 
 export type ModelInfo = BigramModelInfo | TransformerModelInfo
 
 export interface GenerateMessage {
-    type: "generate",
-    model: ModelInfo,
-    chars: number,
-    initialContext: string,
+    type: "generate"
+    model: ModelInfo
+    chars: number
+    initialContext: string
 }
 
 export interface OutputMessage {
-    type: "output",
+    type: "output"
     text: string
 }
 
 export interface DoneMessage {
-    type: "done",
+    type: "done"
 }
 
 export type GptMessage = GenerateMessage | OutputMessage | DoneMessage
