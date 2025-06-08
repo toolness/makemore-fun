@@ -13,7 +13,7 @@ pub fn main() {
     let bytes = UNICODE_STR
         .as_bytes()
         .iter()
-        .map(|&u8| u8 as u16)
+        .map(|&u8| u8 as u32)
         .collect::<Vec<_>>();
     let mut vocab_size = 255;
     println!(
@@ -21,7 +21,7 @@ pub fn main() {
         bytes.len()
     );
 
-    let mut counts: HashMap<(u16, u16), usize> = HashMap::new();
+    let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
     for (&a, &b) in zip(&bytes, &bytes[1..]) {
         let bytepair = (a, b);
         let entry = counts.entry(bytepair).or_insert(0);
@@ -47,7 +47,7 @@ pub fn main() {
     );
 }
 
-fn merge(tokens: &[u16], pair: (u16, u16), pair_token_id: u16) -> Vec<u16> {
+fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     let mut new_tokens = Vec::with_capacity(tokens.len());
     let mut i = 0;
 
