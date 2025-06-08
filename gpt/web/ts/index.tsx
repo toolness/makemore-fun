@@ -145,6 +145,16 @@ function App() {
                 </a>{" "}
                 and use individual characters for tokens.
             </p>
+            <p>
+                If you don't know what it means to train a neural net, see{" "}
+                <a
+                    href="https://toolness.notion.site/neural-net-fun-tutorial"
+                    target="_blank"
+                >
+                    Atul’s Neural Net Fun Tutorial
+                </a>
+                .
+            </p>
             <details>
                 <summary
                     style={{
