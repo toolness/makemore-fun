@@ -1,3 +1,22 @@
+This is a Rust implementation of the material covered by Andrej Karpathy's
+[Let's build GPT: from scratch, in code, spelled out](https://www.youtube.com/watch?v=kCc8FmEb1nY) lecture, using the [Candle](https://github.com/huggingface/candle?tab=readme-ov-file) minimalist ML framework.
+
+You can try the web version online [here](https://toolness.github.io/makemore-fun/).
+
+## CLI quick start
+
+You can train a small transformer model with:
+
+```
+cargo run --release
+```
+
+For more details on how to use the CLI, run:
+
+```
+cargo run --release -- --help
+```
+
 ## Web quick start
 
 For the web version, you will need:
@@ -36,6 +55,6 @@ npm run deploy
 
 ## Credits
 
-Tiny shakespeare is taken from:
+The Tiny Shakespeare dataset is taken from:
 
 https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt

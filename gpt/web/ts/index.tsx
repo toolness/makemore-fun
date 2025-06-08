@@ -48,12 +48,18 @@ const MODEL_CHOICES: ModelChoice[] = [
         description: (
             <>
                 <p>
-                    This is a very small transformer model. Each character is
-                    based on the 8 that came before it. It only has one
-                    self-attention/feed-forward layer, which makes it better
-                    than the bigram model, but it's still gibberish--although
-                    its output is starting to look like <em>some</em> kind of
-                    language.
+                    This is a very small{" "}
+                    <a
+                        href="https://www.youtube.com/watch?v=wjZofJX0v4M"
+                        target="_blank"
+                    >
+                        transformer
+                    </a>{" "}
+                    model. Each character is based on the 8 that came before it.
+                    It only has one self-attention/feed-forward layer, which
+                    makes it better than the bigram model, but it's still
+                    gibberish--although its output is starting to look like{" "}
+                    <em>some</em> kind of language.
                 </p>
                 <p>
                     It has about 17,000 parameters and took around 10 seconds to
@@ -116,6 +122,16 @@ function App() {
                 , which is based on the paper{" "}
                 <a href="https://arxiv.org/abs/1706.03762" target="_blank">
                     Attention Is All You Need
+                </a>
+                .
+            </p>
+            <p>
+                The source code can be found on GitHub at{" "}
+                <a
+                    href="https://github.com/toolness/makemore-fun"
+                    target="_blank"
+                >
+                    toolness/makemore-fun
                 </a>
                 .
             </p>
