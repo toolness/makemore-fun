@@ -17,6 +17,23 @@ For more details on how to use the CLI, run:
 cargo run --release -- --help
 ```
 
+### Training a deep transformer
+
+This will train a GPT about half the size of the one Karpathy
+trains at the end of his lecture:
+
+```
+cargo run --release --features=cuda -- --device=cuda --batch-size=64 --block-size=128 --lr=3e-4 --dropout=0.2 --embedding-dims=192 --heads=6 --layers=6 --epochs=5000 --save=deep
+```
+
+This takes about 12 minutes to train on a RTX 3080.
+
+This transformer can then be run with:
+
+```
+cargo run --release -- --block-size=128 --embedding-dims=192 --heads=6 --layers=6 --epochs=0 --load=deep
+```
+
 ## Web quick start
 
 For the web version, you will need:
