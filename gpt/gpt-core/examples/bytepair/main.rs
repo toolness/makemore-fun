@@ -1,5 +1,7 @@
 use std::{collections::HashMap, iter::zip};
 
+use anyhow::{Result, anyhow};
+
 /// This is the first paragraph from
 /// https://www.reedbeta.com/blog/programmers-intro-to-unicode/
 const UNICODE_STR: &'static str = "Ｕｎｉｃｏｄｅ! 🅤🅝🅘🅒🅞🅓🅔‽ 🇺‌🇳‌🇮‌🇨‌🇴‌🇩‌🇪! 😄 The very name strikes fear and awe into the hearts of programmers worldwide. We all know we ought to “support Unicode” in our software (whatever that means—like using wchar_t for all the strings, right?). But Unicode can be abstruse, and diving into the thousand-page Unicode Standard plus its dozens of supplementary annexes, reports, and notes can be more than a little intimidating. I don’t blame programmers for still finding the whole thing mysterious, even 30 years after Unicode’s inception.";
@@ -39,12 +41,19 @@ pub fn main() {
         char::from_u32(b as u32)
     );
     vocab_size += 1;
-    let new_bytes = merge(&bytes, most_common_pair, vocab_size);
+    let new_tokens = merge(&bytes, most_common_pair, vocab_size);
 
     println!(
         "Incorporated new token into vocabulary, length of new bytes is {}.",
-        new_bytes.len()
+        new_tokens.len()
     );
+
+    let tokenizer = BytePairTokenizer::new(UNICODE_STR, 257).unwrap();
+    assert_eq!(
+        tokenizer.decode(&new_tokens).unwrap(),
+        UNICODE_STR.to_owned()
+    );
+    println!("BytePairTokenizer::decode() works!");
 }
 
 fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
@@ -68,6 +77,91 @@ fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     }
 
     new_tokens
+}
+
+fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
+    let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
+    if tokens.len() < 2 {
+        return Err(anyhow!("tokens does not contain any pairs!"));
+    }
+    for (&a, &b) in zip(tokens.iter(), tokens[1..].iter()) {
+        let pair = (a, b);
+        let entry = counts.entry(pair).or_insert(0);
+        *entry += 1;
+    }
+
+    let mut all = counts.into_iter().collect::<Vec<_>>();
+    all.sort_by(|(_, a_count), (_, b_count)| b_count.cmp(a_count));
+
+    Ok(all[0].0)
+}
+
+struct BytePairTokenizer {
+    //pair_to_token_map: HashMap<(u32, u32), u32>,
+    token_to_pair_map: HashMap<u32, (u32, u32)>,
+}
+
+impl BytePairTokenizer {
+    pub fn new(corpus: &str, vocab_size: usize) -> Result<Self> {
+        if vocab_size < 256 {
+            return Err(anyhow!("vocab_size must be at least 256!"));
+        }
+
+        let mut tokens = corpus
+            .as_bytes()
+            .iter()
+            .map(|&u8| u8 as u32)
+            .collect::<Vec<_>>();
+
+        let mut curr_vocab_size = 256;
+        //let mut pair_to_token_map = HashMap::new();
+        let mut token_to_pair_map = HashMap::new();
+
+        while curr_vocab_size < vocab_size {
+            let pair = get_most_common_pair(&tokens)?;
+            let new_token_id = curr_vocab_size as u32;
+            curr_vocab_size += 1;
+            //pair_to_token_map.insert(pair, new_token_id);
+            token_to_pair_map.insert(new_token_id, pair);
+            tokens = merge(&tokens, pair, new_token_id);
+        }
+
+        Ok(Self {
+            //pair_to_token_map,
+            token_to_pair_map,
+        })
+    }
+
+    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+        let mut curr_tokens: Vec<u32> = tokens.into();
+        loop {
+            let mut keep_going = false;
+            let mut new_tokens = Vec::with_capacity(curr_tokens.len());
+            for &token in &curr_tokens {
+                if token < 256 {
+                    new_tokens.push(token);
+                } else {
+                    let Some(&(a, b)) = self.token_to_pair_map.get(&token) else {
+                        return Err(anyhow!("Invalid token: {token}"));
+                    };
+                    new_tokens.push(a);
+                    new_tokens.push(b);
+                    if a >= 256 || b >= 256 {
+                        keep_going = true;
+                    }
+                }
+            }
+            curr_tokens = new_tokens;
+            if !keep_going {
+                break;
+            }
+        }
+        let bytes = curr_tokens
+            .iter()
+            .map(|&token| token as u8)
+            .collect::<Vec<_>>();
+        Ok(String::from_utf8(bytes)?)
+    }
 }
 
 #[cfg(test)]
