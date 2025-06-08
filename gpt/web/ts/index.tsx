@@ -105,13 +105,17 @@ function App() {
         <div>
             <h1>Language model fun</h1>
             <p>
-                This is Atul's attempt to make a GPT transformer model based on
-                Andrej Karpathy's{" "}
+                This is Atul's attempt to make a Generative Pre-trained
+                Transformer (GPT) model based on Andrej Karpathy's{" "}
                 <a
                     href="https://www.youtube.com/watch?v=kCc8FmEb1nY"
-                    target="blank"
+                    target="_blank"
                 >
                     Let's build GPT: from scratch, in code, spelled out
+                </a>
+                , which is based on the paper{" "}
+                <a href="https://arxiv.org/abs/1706.03762" target="_blank">
+                    Attention Is All You Need
                 </a>
                 .
             </p>
@@ -119,7 +123,7 @@ function App() {
                 All models were trained on{" "}
                 <a
                     href="https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-                    target="blank"
+                    target="_blank"
                 >
                     Tiny Shakespeare
                 </a>{" "}
