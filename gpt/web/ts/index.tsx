@@ -169,9 +169,8 @@ function App() {
                         style={{
                             display: "block",
                             marginTop: 4,
-                            width: "10em",
+                            width: "100%",
                             height: "4em",
-                            fontFamily: "monospace",
                         }}
                         value={initialContext}
                         onChange={(e) => setInitialContext(e.target.value)}
