@@ -10,14 +10,19 @@ const UNICODE_STR: &'static str = "Ｕｎｉｃｏｄｅ! 🅤🅝🅘🅒🅞�
 ///   https://www.youtube.com/watch?v=zduSFxRajkE
 pub fn main() {
     let unicode_len = UNICODE_STR.chars().count();
-    let bytes = UNICODE_STR.as_bytes();
+    let bytes = UNICODE_STR
+        .as_bytes()
+        .iter()
+        .map(|&u8| u8 as u16)
+        .collect::<Vec<_>>();
+    let mut vocab_size = 255;
     println!(
         "Number of unicode chars: {unicode_len}\nNumber of UTF-8 bytes: {}",
         bytes.len()
     );
 
-    let mut counts: HashMap<(u8, u8), usize> = HashMap::new();
-    for (&a, &b) in zip(bytes, &bytes[1..]) {
+    let mut counts: HashMap<(u16, u16), usize> = HashMap::new();
+    for (&a, &b) in zip(&bytes, &bytes[1..]) {
         let bytepair = (a, b);
         let entry = counts.entry(bytepair).or_insert(0);
         *entry += 1;
@@ -26,10 +31,51 @@ pub fn main() {
     let mut all = counts.into_iter().collect::<Vec<_>>();
     all.sort_by(|(_, a_count), (_, b_count)| b_count.cmp(a_count));
 
-    let ((a, b), count) = all[0];
+    let (most_common_pair, count) = all[0];
+    let (a, b) = most_common_pair;
     println!(
         "Most common pair with {count} occurrences: {a} ({:?}) {b} ({:?})",
         char::from_u32(a as u32),
         char::from_u32(b as u32)
     );
+    vocab_size += 1;
+    let new_bytes = merge(&bytes, most_common_pair, vocab_size);
+
+    println!(
+        "Incorporated new token into vocabulary, length of new bytes is {}.",
+        new_bytes.len()
+    );
+}
+
+fn merge(tokens: &[u16], pair: (u16, u16), pair_token_id: u16) -> Vec<u16> {
+    let mut new_tokens = Vec::with_capacity(tokens.len());
+    let mut i = 0;
+
+    loop {
+        if i >= tokens.len() {
+            break;
+        }
+        if i < tokens.len() - 1 {
+            let curr_pair = (tokens[i], tokens[i + 1]);
+            if curr_pair == pair {
+                new_tokens.push(pair_token_id);
+                i += 2;
+                continue;
+            }
+        }
+        new_tokens.push(tokens[i]);
+        i += 1;
+    }
+
+    new_tokens
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::merge;
+
+    #[test]
+    fn test_merge() {
+        assert_eq!(merge(&[5, 6, 6, 7, 9, 1], (6, 7), 99), vec![5, 6, 99, 9, 1])
+    }
 }
