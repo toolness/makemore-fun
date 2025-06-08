@@ -98,7 +98,7 @@ fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
 
 struct BytePairTokenizer {
     //pair_to_token_map: HashMap<(u32, u32), u32>,
-    token_to_pair_map: HashMap<u32, (u32, u32)>,
+    token_to_bytes_map: HashMap<u32, Vec<u8>>,
 }
 
 impl BytePairTokenizer {
@@ -115,52 +115,44 @@ impl BytePairTokenizer {
 
         let mut curr_vocab_size = 256;
         //let mut pair_to_token_map = HashMap::new();
-        let mut token_to_pair_map = HashMap::new();
+        let mut token_to_bytes_map = HashMap::new();
+
+        for i in 0..=255u8 {
+            token_to_bytes_map.insert(i as u32, vec![i]);
+        }
 
         while curr_vocab_size < vocab_size {
             let pair = get_most_common_pair(&tokens)?;
             let new_token_id = curr_vocab_size as u32;
             curr_vocab_size += 1;
             //pair_to_token_map.insert(pair, new_token_id);
-            token_to_pair_map.insert(new_token_id, pair);
+            let new_token_bytes = token_to_bytes_map
+                .get(&pair.0)
+                .unwrap()
+                .iter()
+                .chain(token_to_bytes_map.get(&pair.1).unwrap().iter())
+                .copied()
+                .collect::<Vec<_>>();
+            token_to_bytes_map.insert(new_token_id, new_token_bytes);
+            //.extend(token_to_bytes_map.get(&pair.1).unwrap());
             tokens = merge(&tokens, pair, new_token_id);
         }
 
         Ok(Self {
             //pair_to_token_map,
-            token_to_pair_map,
+            token_to_bytes_map,
         })
     }
 
     pub fn decode(&self, tokens: &[u32]) -> Result<String> {
-        let mut curr_tokens: Vec<u32> = tokens.into();
-        loop {
-            let mut keep_going = false;
-            let mut new_tokens = Vec::with_capacity(curr_tokens.len());
-            for &token in &curr_tokens {
-                if token < 256 {
-                    new_tokens.push(token);
-                } else {
-                    let Some(&(a, b)) = self.token_to_pair_map.get(&token) else {
-                        return Err(anyhow!("Invalid token: {token}"));
-                    };
-                    new_tokens.push(a);
-                    new_tokens.push(b);
-                    if a >= 256 || b >= 256 {
-                        keep_going = true;
-                    }
-                }
-            }
-            curr_tokens = new_tokens;
-            if !keep_going {
-                break;
-            }
+        let mut result: Vec<u8> = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            let Some(bytes) = self.token_to_bytes_map.get(token) else {
+                return Err(anyhow!("Invalid token: {token}"));
+            };
+            result.extend(bytes);
         }
-        let bytes = curr_tokens
-            .iter()
-            .map(|&token| token as u8)
-            .collect::<Vec<_>>();
-        Ok(String::from_utf8(bytes)?)
+        Ok(String::from_utf8(result)?)
     }
 }
 
