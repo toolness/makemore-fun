@@ -212,8 +212,6 @@ impl BytePairTokenizer {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use crate::{BytePairTokenizer, get_most_common_pair, merge};
 
     #[test]
@@ -244,5 +242,11 @@ mod tests {
             tokenizer.encode("abcFOOdeFOOfFO"),
             vec![97, 98, 99, 257, 100, 101, 257, 102, 256]
         );
+        assert_eq!(
+            tokenizer
+                .decode(&vec![97, 98, 99, 257, 100, 101, 257, 102, 256])
+                .unwrap(),
+            "abcFOOdeFOOfFO".to_owned()
+        )
     }
 }
