@@ -238,6 +238,7 @@ mod tests {
     #[test]
     fn test_tokenizer() {
         let tokenizer = BytePairTokenizer::new("abcFOOdeFOO", 258).unwrap();
+        assert_eq!(tokenizer.encode("a"), vec![97]);
         assert_eq!(
             tokenizer.encode("abcFOOdeFOOfFO"),
             vec![97, 98, 99, 257, 100, 101, 257, 102, 256]
