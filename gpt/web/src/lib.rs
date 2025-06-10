@@ -3,7 +3,7 @@ use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
-    tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
+    tokenizer::{CharTokenizer, TOKENIZER_VOCABULARY_KEY},
     transformer_language_model::TransformerLanguageModelOptions,
     util::load_data_from_safetensors,
 };
@@ -14,7 +14,7 @@ use wasm_bindgen::prelude::*;
 pub struct WasmLanguageModel {
     varmap: VarMap,
     builder: LanguageModelBuilder,
-    tokenizer: Tokenizer,
+    tokenizer: CharTokenizer,
 }
 
 #[wasm_bindgen]
@@ -56,7 +56,7 @@ impl WasmLanguageModel {
         let mut varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
         let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
-        let tokenizer = Tokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
+        let tokenizer = CharTokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
         let builder = factory(tokenizer.len());
 
         builder.build(vb).map_err(e)?;
@@ -97,13 +97,13 @@ impl WasmLanguageModel {
 pub struct WasmLanguageGenerator {
     rng: StdRng,
     generator: LanguageGenerator,
-    tokenizer: Tokenizer,
+    tokenizer: CharTokenizer,
     device: Device,
 }
 
 #[wasm_bindgen]
 impl WasmLanguageGenerator {
-    fn create(seed: u64, generator: LanguageGenerator, tokenizer: Tokenizer) -> Self {
+    fn create(seed: u64, generator: LanguageGenerator, tokenizer: CharTokenizer) -> Self {
         Self {
             rng: StdRng::seed_from_u64(seed),
             generator,

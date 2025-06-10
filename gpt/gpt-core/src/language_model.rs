@@ -5,7 +5,7 @@ use candle_nn::{Module, loss::cross_entropy, ops::softmax};
 use rand::rngs::StdRng;
 
 use crate::{
-    tokenizer::Tokenizer,
+    tokenizer::CharTokenizer,
     util::{assert_equal_tensors, multinomial},
 };
 
@@ -74,7 +74,7 @@ impl LanguageGenerator {
     pub fn next_char(
         &mut self,
         rng: &mut StdRng,
-        tokenizer: &Tokenizer,
+        tokenizer: &CharTokenizer,
         temperature: f32,
         device: &Device,
     ) -> Result<char> {

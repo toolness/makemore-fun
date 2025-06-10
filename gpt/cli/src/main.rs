@@ -20,7 +20,7 @@ use gpt_core::{
     language_model::{LanguageGenerator, language_loss},
     tokenizer::TOKENIZER_VOCABULARY_KEY,
 };
-use gpt_core::{tokenizer::Tokenizer, util::load_data_from_safetensors};
+use gpt_core::{tokenizer::CharTokenizer, util::load_data_from_safetensors};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
-    let mut safetensors_tokenizer: Option<Tokenizer> = None;
+    let mut safetensors_tokenizer: Option<CharTokenizer> = None;
 
     let safetensors = if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
@@ -54,7 +54,7 @@ fn main() -> Result<()> {
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
         if let Ok(tokenizer_tensor) = data.load(TOKENIZER_VOCABULARY_KEY, &device) {
-            safetensors_tokenizer = Some(Tokenizer::from_tensor(&tokenizer_tensor)?);
+            safetensors_tokenizer = Some(CharTokenizer::from_tensor(&tokenizer_tensor)?);
         }
         Some(data)
     } else {
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
     };
 
     let mut training_info: Option<(usize, Tensor)> = None;
-    let mut training_tokenizer: Option<Tokenizer> = None;
+    let mut training_tokenizer: Option<CharTokenizer> = None;
 
     if args.epochs > 0 || safetensors_tokenizer.is_none() {
         let (tokenizer, training_data) =
@@ -239,8 +239,8 @@ pub enum TrainingSet {
 fn generate_training_data(
     training_corpus: String,
     device: &candle_core::Device,
-) -> Result<(Tokenizer, Tensor)> {
-    let tokenizer = Tokenizer::from_string(&training_corpus)?;
+) -> Result<(CharTokenizer, Tensor)> {
+    let tokenizer = CharTokenizer::from_string(&training_corpus)?;
     let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
     Ok((tokenizer, data))
 }

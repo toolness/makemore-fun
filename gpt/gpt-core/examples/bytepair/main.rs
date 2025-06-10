@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
-use gpt_core::tokenizer::Tokenizer;
+use gpt_core::tokenizer::CharTokenizer;
 
 /// This is the first paragraph from
 /// https://www.reedbeta.com/blog/programmers-intro-to-unicode/
@@ -58,7 +58,7 @@ pub fn main() {
     );
     println!("BytePairTokenizer::decode() works!");
 
-    let tok = Tokenizer::from_string(&String::from("alo")).unwrap();
+    let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
     let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
     assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
     println!("CharPairTokenizer::encode() works!");
@@ -225,13 +225,13 @@ impl BytePairTokenizer {
 struct CharPairTokenizer {
     pair_to_token_map: HashMap<(u32, u32), u32>,
     token_to_chars_map: HashMap<u32, Vec<char>>,
-    initial_vocab: Tokenizer,
+    initial_vocab: CharTokenizer,
 }
 
 impl CharPairTokenizer {
     pub fn new<T: AsRef<str>>(
         corpus: T,
-        initial_vocab: Tokenizer,
+        initial_vocab: CharTokenizer,
         vocab_size: usize,
     ) -> Result<Self> {
         if vocab_size < initial_vocab.len() {
@@ -293,7 +293,7 @@ impl CharPairTokenizer {
 
 #[cfg(test)]
 mod tests {
-    use gpt_core::tokenizer::Tokenizer;
+    use gpt_core::tokenizer::CharTokenizer;
 
     use crate::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge};
 
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_char_pair_tokenizer() {
-        let tok = Tokenizer::from_string(&String::from("alo")).unwrap();
+        let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
         let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
         assert_eq!(cptok.decode(&[0, 3, 3]).unwrap(), "alolo".to_owned());
