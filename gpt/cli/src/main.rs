@@ -13,14 +13,14 @@ use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
 use gpt_core::{
+    char_tokenizer::CHAR_TOKENIZER_VOCABULARY_KEY,
+    language_model::{LanguageGenerator, language_loss},
+};
+use gpt_core::{char_tokenizer::CharTokenizer, util::load_data_from_safetensors};
+use gpt_core::{
     language_model::LanguageModel,
     util::{count_params, print_gradient_info},
 };
-use gpt_core::{
-    language_model::{LanguageGenerator, language_loss},
-    tokenizer::TOKENIZER_VOCABULARY_KEY,
-};
-use gpt_core::{tokenizer::CharTokenizer, util::load_data_from_safetensors};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
         // an UNSAFE block...
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
-        if let Ok(tokenizer_tensor) = data.load(TOKENIZER_VOCABULARY_KEY, &device) {
+        if let Ok(tokenizer_tensor) = data.load(CHAR_TOKENIZER_VOCABULARY_KEY, &device) {
             safetensors_tokenizer = Some(CharTokenizer::from_tensor(&tokenizer_tensor)?);
         }
         Some(data)
@@ -183,13 +183,13 @@ fn main() -> Result<()> {
         // we perform inference anyways so it's not that big a deal.
         varmap.get(
             (tokenizer.len(),),
-            TOKENIZER_VOCABULARY_KEY,
+            CHAR_TOKENIZER_VOCABULARY_KEY,
             candle_nn::Init::Const(0.0),
             DType::U32,
             &device,
         )?;
         varmap.set_one(
-            TOKENIZER_VOCABULARY_KEY,
+            CHAR_TOKENIZER_VOCABULARY_KEY,
             tokenizer.clone().into_tensor(&device)?,
         )?;
         varmap.save(save)?;

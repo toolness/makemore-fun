@@ -5,7 +5,7 @@ use candle_nn::{Module, loss::cross_entropy, ops::softmax};
 use rand::rngs::StdRng;
 
 use crate::{
-    tokenizer::CharTokenizer,
+    char_tokenizer::CharTokenizer,
     util::{assert_equal_tensors, multinomial},
 };
 

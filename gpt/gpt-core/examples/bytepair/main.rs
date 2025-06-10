@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
-use gpt_core::tokenizer::CharTokenizer;
+use gpt_core::char_tokenizer::CharTokenizer;
 
 /// This is the first paragraph from
 /// https://www.reedbeta.com/blog/programmers-intro-to-unicode/
@@ -293,7 +293,7 @@ impl CharPairTokenizer {
 
 #[cfg(test)]
 mod tests {
-    use gpt_core::tokenizer::CharTokenizer;
+    use gpt_core::char_tokenizer::CharTokenizer;
 
     use crate::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge};
 

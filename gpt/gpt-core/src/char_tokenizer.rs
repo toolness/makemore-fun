@@ -12,7 +12,7 @@ use candle_core::{Device, Tensor};
 /// model parameter.
 ///
 /// The key's value is meant to be a Tensor returned by `Tokenizer::into_tensor()`.
-pub const TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
+pub const CHAR_TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
 
 /// Character-level tokenizer in the style of Karpathy's
 /// neural net lectures.
