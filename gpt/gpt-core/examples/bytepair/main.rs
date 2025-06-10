@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
+use gpt_core::tokenizer::Tokenizer;
 
 /// This is the first paragraph from
 /// https://www.reedbeta.com/blog/programmers-intro-to-unicode/
@@ -56,6 +57,14 @@ pub fn main() {
         UNICODE_STR.to_owned()
     );
     println!("BytePairTokenizer::decode() works!");
+
+    let tok = Tokenizer::from_string(&String::from("alo")).unwrap();
+    let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
+    assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
+    println!("CharPairTokenizer::encode() works!");
+
+    assert_eq!(cptok.decode(&[0, 3, 3]).unwrap(), "alolo".to_owned());
+    println!("CharPairTokenizer::decode() works!");
 }
 
 fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
@@ -210,9 +219,107 @@ impl BytePairTokenizer {
     }
 }
 
+struct CharPairTokenizer {
+    pair_to_token_map: HashMap<(u32, u32), u32>,
+    token_to_chars_map: HashMap<u32, Vec<char>>,
+    initial_vocab: Tokenizer,
+}
+
+impl CharPairTokenizer {
+    pub fn new<T: AsRef<str>>(
+        corpus: T,
+        initial_vocab: Tokenizer,
+        vocab_size: usize,
+    ) -> Result<Self> {
+        if vocab_size < initial_vocab.len() {
+            return Err(anyhow!(
+                "vocab_size must be at least the size of initial_vocab!"
+            ));
+        }
+
+        let mut tokens = initial_vocab.encode(corpus)?;
+
+        let mut curr_vocab_size = initial_vocab.len();
+        let mut pair_to_token_map = HashMap::new();
+        let mut token_to_chars_map = HashMap::new();
+
+        for i in 0..initial_vocab.len() {
+            token_to_chars_map.insert(i as u32, vec![initial_vocab.decode_char(i as u32)?]);
+        }
+
+        while curr_vocab_size < vocab_size {
+            let pair = get_most_common_pair(&tokens)?;
+            let new_token_id = curr_vocab_size as u32;
+            curr_vocab_size += 1;
+            pair_to_token_map.insert(pair, new_token_id);
+            let new_token_chars = token_to_chars_map
+                .get(&pair.0)
+                .unwrap()
+                .iter()
+                .chain(token_to_chars_map.get(&pair.1).unwrap().iter())
+                .copied()
+                .collect::<Vec<_>>();
+            token_to_chars_map.insert(new_token_id, new_token_chars);
+            tokens = merge(&tokens, pair, new_token_id);
+        }
+
+        Ok(Self {
+            pair_to_token_map,
+            token_to_chars_map,
+            initial_vocab,
+        })
+    }
+
+    pub fn encode<T: AsRef<str>>(&self, string: T) -> Result<Vec<u32>> {
+        // This is pretty inefficient and can probably be improved a lot.
+        let mut tokens = self.initial_vocab.encode(string)?;
+
+        loop {
+            let mut new_tokens = Vec::with_capacity(tokens.len());
+            let mut i = 0;
+            let mut keep_going = false;
+            loop {
+                if i >= tokens.len() {
+                    break;
+                }
+                if i < tokens.len() - 1 {
+                    let curr_pair = (tokens[i], tokens[i + 1]);
+                    if let Some(&token) = self.pair_to_token_map.get(&curr_pair) {
+                        new_tokens.push(token);
+                        i += 2;
+                        keep_going = true;
+                        continue;
+                    }
+                }
+                new_tokens.push(tokens[i]);
+                i += 1;
+            }
+            tokens = new_tokens;
+            if !keep_going {
+                break;
+            }
+        }
+
+        Ok(tokens)
+    }
+
+    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+        let mut result: Vec<char> = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            let Some(chars) = self.token_to_chars_map.get(token) else {
+                return Err(anyhow!("Invalid token: {token}"));
+            };
+            result.extend(chars);
+        }
+        Ok(result.into_iter().collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{BytePairTokenizer, get_most_common_pair, merge};
+    use gpt_core::tokenizer::Tokenizer;
+
+    use crate::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge};
 
     #[test]
     fn test_merge() {
@@ -236,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenizer() {
+    fn test_byte_pair_tokenizer() {
         let tokenizer = BytePairTokenizer::new("abcFOOdeFOO", 258).unwrap();
         assert_eq!(tokenizer.encode("a"), vec![97]);
         assert_eq!(
@@ -249,5 +356,13 @@ mod tests {
                 .unwrap(),
             "abcFOOdeFOOfFO".to_owned()
         )
+    }
+
+    #[test]
+    fn test_char_pair_tokenizer() {
+        let tok = Tokenizer::from_string(&String::from("alo")).unwrap();
+        let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
+        assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
+        assert_eq!(cptok.decode(&[0, 3, 3]).unwrap(), "alolo".to_owned());
     }
 }
