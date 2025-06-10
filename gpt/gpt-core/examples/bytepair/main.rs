@@ -120,6 +120,36 @@ fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
     Ok(all[0].0)
 }
 
+fn pair_compress(mut tokens: Vec<u32>, pair_to_token_map: &HashMap<(u32, u32), u32>) -> Vec<u32> {
+    // This is pretty inefficient and can probably be improved a lot.
+    loop {
+        let mut new_tokens = Vec::with_capacity(tokens.len());
+        let mut i = 0;
+        let mut keep_going = false;
+        loop {
+            if i >= tokens.len() {
+                break;
+            }
+            if i < tokens.len() - 1 {
+                let curr_pair = (tokens[i], tokens[i + 1]);
+                if let Some(&token) = pair_to_token_map.get(&curr_pair) {
+                    new_tokens.push(token);
+                    i += 2;
+                    keep_going = true;
+                    continue;
+                }
+            }
+            new_tokens.push(tokens[i]);
+            i += 1;
+        }
+        tokens = new_tokens;
+        if !keep_going {
+            break;
+        }
+    }
+    tokens
+}
+
 struct BytePairTokenizer {
     pair_to_token_map: HashMap<(u32, u32), u32>,
     token_to_bytes_map: HashMap<u32, Vec<u8>>,
@@ -170,41 +200,14 @@ impl BytePairTokenizer {
     }
 
     pub fn encode<T: AsRef<str>>(&self, string: T) -> Vec<u32> {
-        // This is pretty inefficient and can probably be improved a lot.
-        let mut tokens = string
+        let tokens = string
             .as_ref()
             .as_bytes()
             .iter()
             .map(|&u8| u8 as u32)
             .collect::<Vec<_>>();
 
-        loop {
-            let mut new_tokens = Vec::with_capacity(tokens.len());
-            let mut i = 0;
-            let mut keep_going = false;
-            loop {
-                if i >= tokens.len() {
-                    break;
-                }
-                if i < tokens.len() - 1 {
-                    let curr_pair = (tokens[i], tokens[i + 1]);
-                    if let Some(&token) = self.pair_to_token_map.get(&curr_pair) {
-                        new_tokens.push(token);
-                        i += 2;
-                        keep_going = true;
-                        continue;
-                    }
-                }
-                new_tokens.push(tokens[i]);
-                i += 1;
-            }
-            tokens = new_tokens;
-            if !keep_going {
-                break;
-            }
-        }
-
-        tokens
+        pair_compress(tokens, &self.pair_to_token_map)
     }
 
     pub fn decode(&self, tokens: &[u32]) -> Result<String> {
@@ -272,35 +275,8 @@ impl CharPairTokenizer {
 
     pub fn encode<T: AsRef<str>>(&self, string: T) -> Result<Vec<u32>> {
         // This is pretty inefficient and can probably be improved a lot.
-        let mut tokens = self.initial_vocab.encode(string)?;
-
-        loop {
-            let mut new_tokens = Vec::with_capacity(tokens.len());
-            let mut i = 0;
-            let mut keep_going = false;
-            loop {
-                if i >= tokens.len() {
-                    break;
-                }
-                if i < tokens.len() - 1 {
-                    let curr_pair = (tokens[i], tokens[i + 1]);
-                    if let Some(&token) = self.pair_to_token_map.get(&curr_pair) {
-                        new_tokens.push(token);
-                        i += 2;
-                        keep_going = true;
-                        continue;
-                    }
-                }
-                new_tokens.push(tokens[i]);
-                i += 1;
-            }
-            tokens = new_tokens;
-            if !keep_going {
-                break;
-            }
-        }
-
-        Ok(tokens)
+        let tokens = self.initial_vocab.encode(string)?;
+        Ok(pair_compress(tokens, &self.pair_to_token_map))
     }
 
     pub fn decode(&self, tokens: &[u32]) -> Result<String> {
