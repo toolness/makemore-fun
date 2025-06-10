@@ -109,7 +109,6 @@ impl CharTokenizer {
         Ok(char)
     }
 
-    #[cfg(test)]
     pub fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result = String::with_capacity(tokens.len());
 
