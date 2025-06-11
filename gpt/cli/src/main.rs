@@ -66,6 +66,10 @@ fn main() -> Result<()> {
     let mut training_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     if args.epochs > 0 || safetensors_tokenizer.is_none() {
+        println!(
+            "Initializing tokenizer {:?} with training data...",
+            args.tokenizer
+        );
         let (tokenizer, training_data) = args.create_tokenizer_and_training_data(&device)?;
         if args.epochs > 0 {
             training_info = Some((args.epochs, training_data));
