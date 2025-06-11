@@ -1,10 +1,10 @@
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
-    char_tokenizer::CharTokenizer,
+    char_tokenizer::{CHAR_TOKENIZER_VOCABULARY_KEY, CharTokenizer},
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
-    tokenizer::{TOKENIZER_VOCABULARY_KEY, Tokenizer},
+    tokenizer::Tokenizer,
     transformer_language_model::TransformerLanguageModelOptions,
     util::load_data_from_safetensors,
 };
@@ -56,8 +56,8 @@ impl WasmLanguageModel {
         let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8.into())?;
         let mut varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-        let tokenizer_tensor = safetensors.load(TOKENIZER_VOCABULARY_KEY, &device)?;
-        let tokenizer = CharTokenizer::try_from(tokenizer_tensor).map_err(e)?;
+        let tokenizer_tensor = safetensors.load(CHAR_TOKENIZER_VOCABULARY_KEY, &device)?;
+        let tokenizer = CharTokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
         let builder = factory(tokenizer.len());
 
         builder.build(vb).map_err(e)?;
