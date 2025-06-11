@@ -309,11 +309,16 @@ impl Tokenizer for CharPairTokenizer {
     }
 
     fn debug_vocab(&self) -> String {
-        let result: Vec<String> = self
-            .token_to_chars_map
-            .values()
-            .map(|chars| chars.iter().collect())
-            .collect();
+        let mut result: Vec<String> = Vec::with_capacity(self.token_to_chars_map.len());
+        for token in 0..self.token_to_chars_map.len() {
+            let str: String = self
+                .token_to_chars_map
+                .get(&(token as u32))
+                .unwrap()
+                .iter()
+                .collect();
+            result.push(str);
+        }
         format!("{:?}", result)
     }
 }
