@@ -181,6 +181,7 @@ fn main() -> Result<()> {
     if let Some(save) = &args.save {
         let save = normalize_safetensors_filename(save);
         println!("Saving weights to {save}.");
+        let tensor = tokenizer.as_tensor(&device)?;
         // We need to get the key, which creates it, before we can actually
         // set it (this feels very weird).
         //
@@ -189,13 +190,13 @@ fn main() -> Result<()> {
         // real variable, when it's actually not. But this is right before
         // we perform inference anyways so it's not that big a deal.
         varmap.get(
-            (tokenizer.len(),),
+            tensor.shape(),
             TOKENIZER_VOCABULARY_KEY,
             candle_nn::Init::Const(0.0),
-            DType::U32,
+            tensor.dtype(),
             &device,
         )?;
-        varmap.set_one(TOKENIZER_VOCABULARY_KEY, tokenizer.as_tensor(&device)?)?;
+        varmap.set_one(TOKENIZER_VOCABULARY_KEY, tensor)?;
         varmap.save(save)?;
     }
 
