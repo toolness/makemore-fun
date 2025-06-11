@@ -122,6 +122,7 @@ impl Args {
         device: &candle_core::Device,
     ) -> Result<(Box<dyn Tokenizer>, Tensor)> {
         let training_corpus = std::fs::read_to_string(&self.corpus)?;
+        let original_len = training_corpus.len();
         let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
             TokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
             TokenizerType::CharPairAlpha => {
@@ -134,7 +135,13 @@ impl Args {
                 )?)
             }
         };
-        let data = Tensor::new(tokenizer.encode(&training_corpus)?, device)?;
+        let tokens = tokenizer.encode(&training_corpus)?;
+        let tokens_len = tokens.len();
+        let data = Tensor::new(tokens, device)?;
+        println!(
+            "Tokenizer training data compression ratio: {:.2}",
+            original_len as f32 / tokens_len as f32
+        );
         Ok((tokenizer, data))
     }
 }
