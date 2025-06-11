@@ -175,6 +175,10 @@ impl Tokenizer for BytePairTokenizer {
     fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
     }
+
+    fn debug_vocab(&self) -> String {
+        todo!()
+    }
 }
 
 pub struct CharPairTokenizer {
@@ -257,6 +261,15 @@ impl Tokenizer for CharPairTokenizer {
 
     fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
+    }
+
+    fn debug_vocab(&self) -> String {
+        let result: Vec<String> = self
+            .token_to_chars_map
+            .values()
+            .map(|chars| chars.iter().collect())
+            .collect();
+        format!("{:?}", result)
     }
 }
 

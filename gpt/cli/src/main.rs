@@ -94,6 +94,9 @@ fn main() -> Result<()> {
     let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
+    if args.vars {
+        println!("Tokenizer vocabulary: {}", tokenizer.debug_vocab());
+    }
 
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
     // println!("xs:\n{xs}\nys:\n{ys}");
