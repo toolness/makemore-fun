@@ -27,12 +27,26 @@ pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     new_tokens
 }
 
+fn allow_all(_token: u32) -> bool {
+    true
+}
+
 fn get_most_common_pair(tokens: &[u32]) -> Option<(u32, u32)> {
+    get_most_common_pair_with_filter(tokens, allow_all)
+}
+
+fn get_most_common_pair_with_filter<F: Fn(u32) -> bool>(
+    tokens: &[u32],
+    filter: F,
+) -> Option<(u32, u32)> {
     let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
     if tokens.len() < 2 {
         return None;
     }
     for (&a, &b) in zip(tokens.iter(), tokens[1..].iter()) {
+        if !filter(a) || !filter(b) {
+            continue;
+        }
         let pair = (a, b);
         let entry = counts.entry(pair).or_insert(0);
         *entry += 1;
@@ -187,6 +201,11 @@ impl Tokenizer for BytePairTokenizer {
     }
 }
 
+pub enum CharPairFilter {
+    /// Only merge alphabetic characters into pairs.
+    AlphaOnly,
+}
+
 pub struct CharPairTokenizer {
     pair_to_token_map: HashMap<(u32, u32), u32>,
     token_to_chars_map: HashMap<u32, Vec<char>>,
@@ -198,8 +217,11 @@ impl CharPairTokenizer {
         corpus: T,
         initial_vocab: CharTokenizer,
         vocab_size: usize,
+        filter: Option<CharPairFilter>,
     ) -> Result<Self> {
-        if vocab_size < initial_vocab.len() {
+        let initial_vocab_size = initial_vocab.len();
+
+        if vocab_size < initial_vocab_size {
             return Err(anyhow!(
                 "vocab_size must be at least the size of initial_vocab!"
             ));
@@ -207,16 +229,31 @@ impl CharPairTokenizer {
 
         let mut tokens = initial_vocab.encode(corpus.as_ref())?;
 
-        let mut curr_vocab_size = initial_vocab.len();
+        let mut curr_vocab_size = initial_vocab_size;
         let mut pair_to_token_map = HashMap::new();
         let mut token_to_chars_map = HashMap::new();
 
-        for i in 0..initial_vocab.len() {
+        for i in 0..initial_vocab_size {
             token_to_chars_map.insert(i as u32, vec![initial_vocab.decode_char(i as u32)?]);
         }
 
         while curr_vocab_size < vocab_size {
-            let Some(pair) = get_most_common_pair(&tokens) else {
+            let Some(pair) = (match filter {
+                None => get_most_common_pair(&tokens),
+                Some(CharPairFilter::AlphaOnly) => {
+                    get_most_common_pair_with_filter(&tokens, |token| {
+                        if token < initial_vocab_size as u32 {
+                            let char = initial_vocab.decode_char(token).unwrap();
+                            match char {
+                                'A'..'Z' | 'a'..'z' => true,
+                                _ => false,
+                            }
+                        } else {
+                            true
+                        }
+                    })
+                }
+            }) else {
                 break;
             };
             let new_token_id = curr_vocab_size as u32;
@@ -285,7 +322,9 @@ impl Tokenizer for CharPairTokenizer {
 mod tests {
     use crate::{
         char_tokenizer::CharTokenizer,
-        pair_tokenizers::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge},
+        pair_tokenizers::{
+            BytePairTokenizer, CharPairFilter, CharPairTokenizer, get_most_common_pair, merge,
+        },
         tokenizer::Tokenizer,
     };
 
@@ -327,10 +366,22 @@ mod tests {
     }
 
     #[test]
-    fn test_char_pair_tokenizer() {
+    fn test_char_pair_tokenizer_without_filter() {
         let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
-        let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
+        let cptok = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
         assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
+    }
+
+    #[test]
+    fn test_char_pair_tokenizer_with_alpha_filter() {
+        let tok = CharTokenizer::from_string(&String::from("alo!")).unwrap();
+        let cptok =
+            CharPairTokenizer::new("alolo!!!!", tok, 6, Some(CharPairFilter::AlphaOnly)).unwrap();
+        assert_eq!(cptok.encode("alolo!!!!").unwrap(), vec![5, 4, 0, 0, 0, 0]);
+        assert_eq!(
+            cptok.decode(&vec![5, 4, 0, 0, 0, 0]).unwrap(),
+            "alolo!!!!".to_owned()
+        );
     }
 }

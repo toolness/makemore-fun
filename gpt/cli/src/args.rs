@@ -4,7 +4,7 @@ use candle_core::Tensor;
 use clap::{Parser, ValueEnum};
 use gpt_core::char_tokenizer::CharTokenizer;
 use gpt_core::language_model_builder::LanguageModelBuilder;
-use gpt_core::pair_tokenizers::CharPairTokenizer;
+use gpt_core::pair_tokenizers::{CharPairFilter, CharPairTokenizer};
 use gpt_core::tokenizer::Tokenizer;
 use gpt_core::transformer_language_model::TransformerLanguageModelOptions;
 
@@ -17,7 +17,7 @@ pub enum Model {
 #[derive(Debug, Clone, ValueEnum)]
 pub enum TokenizerType {
     Char,
-    CharPair,
+    CharPairAlpha,
 }
 
 #[derive(Parser)]
@@ -124,12 +124,13 @@ impl Args {
         let training_corpus = std::fs::read_to_string(&self.corpus)?;
         let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
             TokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
-            TokenizerType::CharPair => {
+            TokenizerType::CharPairAlpha => {
                 let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
                 Box::new(CharPairTokenizer::new(
                     &training_corpus,
                     initial_vocab,
                     self.vocab_size,
+                    Some(CharPairFilter::AlphaOnly),
                 )?)
             }
         };
