@@ -1,6 +1,9 @@
 use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
+use candle_core::Tensor;
+use rmp_serde::{Serializer, from_slice};
+use serde::{Deserialize, Serialize};
 
 use crate::{char_tokenizer::CharTokenizer, tokenizer::Tokenizer};
 
@@ -192,6 +195,10 @@ impl Tokenizer for BytePairTokenizer {
         Ok(String::from_utf8(result)?)
     }
 
+    // I mainly just implemented this to put Karpathy's lecture in practice,
+    // but right now I don't have a use for it, so I'm leaving these methods
+    // unimplemented...
+
     fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
     }
@@ -208,6 +215,23 @@ impl Tokenizer for BytePairTokenizer {
 pub enum CharPairFilter {
     /// Only merge alphabetic characters into pairs.
     AlphaOnly,
+}
+
+#[derive(Deserialize, Serialize)]
+struct SerializedCharPairTokenizer {
+    pair_to_token_map: HashMap<(u32, u32), u32>,
+    token_to_chars_map: HashMap<u32, Vec<char>>,
+    initial_vocab: Vec<char>,
+}
+
+impl SerializedCharPairTokenizer {
+    fn into_tokenizer(self) -> Result<CharPairTokenizer> {
+        Ok(CharPairTokenizer {
+            pair_to_token_map: self.pair_to_token_map,
+            token_to_chars_map: self.token_to_chars_map,
+            initial_vocab: CharTokenizer::from_char_vec(self.initial_vocab)?,
+        })
+    }
 }
 
 pub struct CharPairTokenizer {
@@ -280,6 +304,20 @@ impl CharPairTokenizer {
             initial_vocab,
         })
     }
+
+    fn serialize(&self) -> SerializedCharPairTokenizer {
+        SerializedCharPairTokenizer {
+            pair_to_token_map: self.pair_to_token_map.clone(),
+            token_to_chars_map: self.token_to_chars_map.clone(),
+            initial_vocab: self.initial_vocab.clone().into_char_vec(),
+        }
+    }
+
+    pub fn from_tensor(tensor: &Tensor) -> Result<Self> {
+        let vec: Vec<u8> = tensor.to_vec1()?;
+        let ser: SerializedCharPairTokenizer = from_slice(&vec)?;
+        Ok(ser.into_tokenizer()?)
+    }
 }
 
 impl Tokenizer for CharPairTokenizer {
@@ -308,8 +346,11 @@ impl Tokenizer for CharPairTokenizer {
         Ok(result.into_iter().collect())
     }
 
-    fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
-        todo!()
+    fn as_tensor(&self, device: &candle_core::Device) -> Result<candle_core::Tensor> {
+        let mut buf = Vec::new();
+        self.serialize().serialize(&mut Serializer::new(&mut buf))?;
+        let len = buf.len();
+        Ok(Tensor::from_vec(buf, (len,), device)?)
     }
 
     fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
@@ -382,6 +423,18 @@ mod tests {
     fn test_char_pair_tokenizer_without_filter() {
         let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
         let cptok = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
+        assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
+        assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
+    }
+
+    #[test]
+    fn test_char_pair_tokenizer_serialization() {
+        let ser = {
+            let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
+            let orig = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
+            orig.as_tensor(&candle_core::Device::Cpu).unwrap()
+        };
+        let cptok = CharPairTokenizer::from_tensor(&ser).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
         assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
     }
