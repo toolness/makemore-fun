@@ -139,10 +139,20 @@ impl BytePairTokenizer {
             token_to_bytes_map,
         })
     }
+}
 
-    pub fn encode<T: AsRef<str>>(&self, string: T) -> Vec<u32> {
-        let tokens = string
-            .as_ref()
+impl Tokenizer for BytePairTokenizer {
+    fn len(&self) -> usize {
+        self.token_to_bytes_map.len()
+    }
+
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        Ok(self.encode_lossy(content))
+    }
+
+    /// Note that this isn't actually lossy.
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let tokens = content
             .as_bytes()
             .iter()
             .map(|&u8| u8 as u32)
@@ -151,7 +161,7 @@ impl BytePairTokenizer {
         pair_compress(tokens, &self.pair_to_token_map)
     }
 
-    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result: Vec<u8> = Vec::with_capacity(tokens.len());
         for token in tokens {
             let Some(bytes) = self.token_to_bytes_map.get(token) else {
@@ -160,6 +170,10 @@ impl BytePairTokenizer {
             result.extend(bytes);
         }
         Ok(String::from_utf8(result)?)
+    }
+
+    fn into_tensor(self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
+        todo!()
     }
 }
 
@@ -278,9 +292,9 @@ mod tests {
     #[test]
     fn test_byte_pair_tokenizer() {
         let tokenizer = BytePairTokenizer::new("abcFOOdeFOO", 258).unwrap();
-        assert_eq!(tokenizer.encode("a"), vec![97]);
+        assert_eq!(tokenizer.encode("a").unwrap(), vec![97]);
         assert_eq!(
-            tokenizer.encode("abcFOOdeFOOfFO"),
+            tokenizer.encode("abcFOOdeFOOfFO").unwrap(),
             vec![97, 98, 99, 257, 100, 101, 257, 102, 256]
         );
         assert_eq!(

@@ -1,6 +1,9 @@
 use std::{collections::HashMap, iter::zip};
 
-use gpt_core::pair_tokenizers::{BytePairTokenizer, merge};
+use gpt_core::{
+    pair_tokenizers::{BytePairTokenizer, merge},
+    tokenizer::Tokenizer,
+};
 
 /// This is the first paragraph from
 /// https://www.reedbeta.com/blog/programmers-intro-to-unicode/
@@ -49,7 +52,7 @@ pub fn main() {
     );
 
     let tokenizer = BytePairTokenizer::new(UNICODE_STR, 257).unwrap();
-    assert_eq!(tokenizer.encode(UNICODE_STR), new_tokens);
+    assert_eq!(tokenizer.encode(UNICODE_STR).unwrap(), new_tokens);
     println!("BytePairTokenizer::encode() works!");
     assert_eq!(
         tokenizer.decode(&new_tokens).unwrap(),
