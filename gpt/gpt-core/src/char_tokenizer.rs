@@ -8,14 +8,6 @@ use candle_core::{Device, Tensor};
 
 use crate::tokenizer::Tokenizer;
 
-/// Key in safetensors file to store tokenizer vocabulary.
-/// Prefixing it with "BUFFER." because this is similar to a pytorch
-/// buffer and we want to make it obvious that it's not a trainable
-/// model parameter.
-///
-/// The key's value is meant to be a Tensor returned by `Tokenizer::into_tensor()`.
-pub const CHAR_TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
-
 /// Character-level tokenizer in the style of Karpathy's
 /// neural net lectures.
 #[derive(Clone)]
@@ -52,7 +44,7 @@ impl CharTokenizer {
 
     /// Given a one-dimensional tensor with each character representing a
     /// unicode scalar, returns the tokenizer for it.
-    pub fn from_tensor(tensor: &Tensor) -> Result<Self> {
+    fn from_tensor(tensor: &Tensor) -> Result<Self> {
         let chars: Result<Vec<char>, CharTryFromError> = tensor
             .to_vec1::<u32>()?
             .iter()
@@ -63,7 +55,7 @@ impl CharTokenizer {
 
     /// Returns a one-dimensional tensor with each character in the vocabulary
     /// represented by a unicode scalar.
-    pub fn into_tensor(self, device: &Device) -> Result<Tensor> {
+    fn into_tensor(self, device: &Device) -> Result<Tensor> {
         let len = self.ctoi.len();
         let vec = self
             .into_char_vec()
@@ -78,6 +70,22 @@ impl CharTokenizer {
             return Err(anyhow!("'{}' is not a valid token", token));
         };
         Ok(char)
+    }
+}
+
+impl TryFrom<Tensor> for CharTokenizer {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Tensor) -> std::result::Result<Self, Self::Error> {
+        CharTokenizer::from_tensor(&value)
+    }
+}
+
+impl TryInto<Tensor> for CharTokenizer {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> std::result::Result<Tensor, Self::Error> {
+        self.into_tensor(&Device::Cpu)
     }
 }
 
