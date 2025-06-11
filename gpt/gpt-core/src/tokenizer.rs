@@ -1,4 +1,5 @@
 use anyhow::Result;
+use candle_core::{Device, Tensor};
 
 pub trait Tokenizer {
     fn len(&self) -> usize;
@@ -10,4 +11,6 @@ pub trait Tokenizer {
     fn encode_lossy(&self, content: &str) -> Vec<u32>;
 
     fn decode(&self, tokens: &Vec<u32>) -> Result<String>;
+
+    fn into_tensor(self, device: &Device) -> Result<Tensor>;
 }

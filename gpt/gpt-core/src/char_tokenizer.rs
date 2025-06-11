@@ -61,18 +61,6 @@ impl CharTokenizer {
         Ok(CharTokenizer::from_char_vec(chars?)?)
     }
 
-    /// Returns a one-dimensional tensor with each character in the vocabulary
-    /// represented by a unicode scalar.
-    pub fn into_tensor(self, device: &Device) -> Result<Tensor> {
-        let len = self.ctoi.len();
-        let vec = self
-            .into_char_vec()
-            .into_iter()
-            .map(|char| char as u32)
-            .collect();
-        Ok(Tensor::from_vec(vec, (len,), device)?)
-    }
-
     pub fn decode_char(&self, token: u32) -> Result<char> {
         let Some(&char) = self.itoc.get(&token) else {
             return Err(anyhow!("'{}' is not a valid token", token));
@@ -119,6 +107,18 @@ impl Tokenizer for CharTokenizer {
         }
 
         Ok(result)
+    }
+
+    /// Returns a one-dimensional tensor with each character in the vocabulary
+    /// represented by a unicode scalar.
+    fn into_tensor(self, device: &Device) -> Result<Tensor> {
+        let len = self.ctoi.len();
+        let vec = self
+            .into_char_vec()
+            .into_iter()
+            .map(|char| char as u32)
+            .collect();
+        Ok(Tensor::from_vec(vec, (len,), device)?)
     }
 }
 
