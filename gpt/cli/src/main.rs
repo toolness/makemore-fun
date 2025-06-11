@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
-    let mut safetensors_tokenizer: Option<CharTokenizer> = None;
+    let mut safetensors_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     let safetensors = if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
         if let Ok(tokenizer_tensor) = data.load(CHAR_TOKENIZER_VOCABULARY_KEY, &device) {
-            safetensors_tokenizer = Some(CharTokenizer::from_tensor(&tokenizer_tensor)?);
+            safetensors_tokenizer = Some(Box::new(CharTokenizer::from_tensor(&tokenizer_tensor)?));
         }
         Some(data)
     } else {
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
     };
 
     let mut training_info: Option<(usize, Tensor)> = None;
-    let mut training_tokenizer: Option<CharTokenizer> = None;
+    let mut training_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     if args.epochs > 0 || safetensors_tokenizer.is_none() {
         let (tokenizer, training_data) =
@@ -203,7 +203,7 @@ fn main() -> Result<()> {
             LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
         for _ in 0..args.chars {
             let char =
-                language_generator.next_char(&mut rng, &tokenizer, args.temperature, &device)?;
+                language_generator.next_token(&mut rng, &tokenizer, args.temperature, &device)?;
             print!("{}", char);
             std::io::stdout().flush()?;
         }
@@ -237,10 +237,10 @@ pub enum TrainingSet {
 fn generate_training_data(
     training_corpus: String,
     device: &candle_core::Device,
-) -> Result<(CharTokenizer, Tensor)> {
+) -> Result<(Box<dyn Tokenizer>, Tensor)> {
     let tokenizer = CharTokenizer::from_string(&training_corpus)?;
     let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
-    Ok((tokenizer, data))
+    Ok((Box::new(tokenizer), data))
 }
 
 pub struct Trainer {

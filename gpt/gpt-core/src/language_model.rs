@@ -5,7 +5,7 @@ use candle_nn::{Module, loss::cross_entropy, ops::softmax};
 use rand::rngs::StdRng;
 
 use crate::{
-    char_tokenizer::CharTokenizer,
+    tokenizer::Tokenizer,
     util::{assert_equal_tensors, multinomial},
 };
 
@@ -71,13 +71,13 @@ impl LanguageGenerator {
         self.context.push(token);
     }
 
-    pub fn next_char(
+    pub fn next_token(
         &mut self,
         rng: &mut StdRng,
-        tokenizer: &CharTokenizer,
+        tokenizer: &Box<dyn Tokenizer>,
         temperature: f32,
         device: &Device,
-    ) -> Result<char> {
+    ) -> Result<String> {
         let logits = self.logits(device)?;
         let token = if temperature == 0.0 {
             logits.argmax(1)?.get(0)?.to_scalar()?
@@ -89,6 +89,6 @@ impl LanguageGenerator {
             multinomial(&sm, rng)?
         };
         self.push(token);
-        Ok(tokenizer.decode_char(token)?)
+        Ok(tokenizer.decode(&vec![token])?)
     }
 }
