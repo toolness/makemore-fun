@@ -181,7 +181,7 @@ impl CharPairTokenizer {
             ));
         }
 
-        let mut tokens = initial_vocab.encode(corpus)?;
+        let mut tokens = initial_vocab.encode(corpus.as_ref())?;
 
         let mut curr_vocab_size = initial_vocab.len();
         let mut pair_to_token_map = HashMap::new();
@@ -216,7 +216,7 @@ impl CharPairTokenizer {
 
     pub fn encode<T: AsRef<str>>(&self, string: T) -> Result<Vec<u32>> {
         // This is pretty inefficient and can probably be improved a lot.
-        let tokens = self.initial_vocab.encode(string)?;
+        let tokens = self.initial_vocab.encode(string.as_ref())?;
         Ok(pair_compress(tokens, &self.pair_to_token_map))
     }
 

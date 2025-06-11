@@ -86,10 +86,10 @@ impl Tokenizer for CharTokenizer {
         self.ctoi.len()
     }
 
-    fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<u32>> {
-        let mut result = Vec::with_capacity(content.as_ref().len());
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        let mut result = Vec::with_capacity(content.len());
 
-        for char in content.as_ref().chars() {
+        for char in content.chars() {
             let Some(token) = self.ctoi.get(&char) else {
                 return Err(anyhow!("'{}' is not a valid character", char));
             };
@@ -99,10 +99,10 @@ impl Tokenizer for CharTokenizer {
         Ok(result)
     }
 
-    fn encode_lossy<T: AsRef<str>>(&self, content: T) -> Vec<u32> {
-        let mut result = Vec::with_capacity(content.as_ref().len());
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let mut result = Vec::with_capacity(content.len());
 
-        for char in content.as_ref().chars() {
+        for char in content.chars() {
             if let Some(&token) = self.ctoi.get(&char) {
                 result.push(token);
             };
@@ -260,5 +260,11 @@ mod tests {
         assert_eq!(tensor.to_vec1::<u32>().unwrap(), vec![97, 98, 99]);
         let tokenizer = CharTokenizer::from_tensor(&tensor).unwrap();
         assert_eq!(tokenizer.into_char_vec(), vec!['a', 'b', 'c']);
+    }
+
+    #[test]
+    fn test_trait_object_works() {
+        let _trait_obj: Box<dyn Tokenizer> =
+            Box::new(CharTokenizer::from_string(&"hi".to_owned()).unwrap());
     }
 }
