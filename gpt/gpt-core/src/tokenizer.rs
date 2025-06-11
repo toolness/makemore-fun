@@ -1,7 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 
-use crate::{char_tokenizer::CharTokenizer, util::SafetensorLoader};
+use crate::{
+    char_tokenizer::CharTokenizer, pair_tokenizers::CharPairTokenizer, util::SafetensorLoader,
+};
 
 pub enum TokenizerType {
     Char,
@@ -34,8 +36,24 @@ impl TokenizerType {
                 let tensor = safetensors.load_tensor(self.safetensors_key(), device)?;
                 Ok(Box::new(CharTokenizer::from_tensor(&tensor)?))
             }
-            TokenizerType::CharPair => todo!(),
+            TokenizerType::CharPair => {
+                let tensor = safetensors.load_tensor(self.safetensors_key(), device)?;
+                Ok(Box::new(CharPairTokenizer::from_tensor(&tensor)?))
+            }
         }
+    }
+
+    pub fn load_any<T: SafetensorLoader>(
+        safetensors: &T,
+        device: &Device,
+    ) -> Result<Box<dyn Tokenizer>> {
+        let all_types = &[TokenizerType::Char, TokenizerType::CharPair];
+        for tokenizer_type in all_types {
+            if let Ok(tokenizer) = tokenizer_type.load(safetensors, device) {
+                return Ok(tokenizer);
+            }
+        }
+        Err(anyhow!("Unable to load any tokenizer from safetensors!"))
     }
 }
 

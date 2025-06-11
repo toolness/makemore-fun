@@ -53,7 +53,7 @@ fn main() -> Result<()> {
         // an UNSAFE block...
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
-        if let Ok(char_tokenizer) = TokenizerType::Char.load(&data, &device) {
+        if let Ok(char_tokenizer) = TokenizerType::load_any(&data, &device) {
             safetensors_tokenizer = Some(char_tokenizer);
         }
         Some(data)
