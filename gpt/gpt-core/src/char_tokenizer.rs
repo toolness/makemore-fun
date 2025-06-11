@@ -111,9 +111,10 @@ impl Tokenizer for CharTokenizer {
 
     /// Returns a one-dimensional tensor with each character in the vocabulary
     /// represented by a unicode scalar.
-    fn into_tensor(self, device: &Device) -> Result<Tensor> {
+    fn as_tensor(&self, device: &Device) -> Result<Tensor> {
         let len = self.ctoi.len();
         let vec = self
+            .clone()
             .into_char_vec()
             .into_iter()
             .map(|char| char as u32)
@@ -256,7 +257,7 @@ mod tests {
     fn test_from_into_tensor_works() {
         let input = String::from("abc");
         let tokenizer = CharTokenizer::from_string(&input).unwrap();
-        let tensor = tokenizer.into_tensor(&Device::Cpu).unwrap();
+        let tensor = tokenizer.as_tensor(&Device::Cpu).unwrap();
         assert_eq!(tensor.to_vec1::<u32>().unwrap(), vec![97, 98, 99]);
         let tokenizer = CharTokenizer::from_tensor(&tensor).unwrap();
         assert_eq!(tokenizer.into_char_vec(), vec!['a', 'b', 'c']);

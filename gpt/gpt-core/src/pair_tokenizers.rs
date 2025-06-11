@@ -172,7 +172,7 @@ impl Tokenizer for BytePairTokenizer {
         Ok(String::from_utf8(result)?)
     }
 
-    fn into_tensor(self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
+    fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
     }
 }
@@ -255,7 +255,7 @@ impl Tokenizer for CharPairTokenizer {
         Ok(result.into_iter().collect())
     }
 
-    fn into_tensor(self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
+    fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
     }
 }

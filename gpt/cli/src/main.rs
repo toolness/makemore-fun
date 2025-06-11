@@ -189,10 +189,7 @@ fn main() -> Result<()> {
             DType::U32,
             &device,
         )?;
-        varmap.set_one(
-            CHAR_TOKENIZER_VOCABULARY_KEY,
-            tokenizer.clone().into_tensor(&device)?,
-        )?;
+        varmap.set_one(CHAR_TOKENIZER_VOCABULARY_KEY, tokenizer.as_tensor(&device)?)?;
         varmap.save(save)?;
     }
 

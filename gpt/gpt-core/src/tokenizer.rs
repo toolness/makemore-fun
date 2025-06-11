@@ -12,5 +12,5 @@ pub trait Tokenizer {
 
     fn decode(&self, tokens: &Vec<u32>) -> Result<String>;
 
-    fn into_tensor(self, device: &Device) -> Result<Tensor>;
+    fn as_tensor(&self, device: &Device) -> Result<Tensor>;
 }
