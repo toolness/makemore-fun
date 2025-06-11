@@ -27,10 +27,10 @@ pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     new_tokens
 }
 
-fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
+fn get_most_common_pair(tokens: &[u32]) -> Option<(u32, u32)> {
     let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
     if tokens.len() < 2 {
-        return Err(anyhow!("tokens does not contain any pairs!"));
+        return None;
     }
     for (&a, &b) in zip(tokens.iter(), tokens[1..].iter()) {
         let pair = (a, b);
@@ -54,7 +54,11 @@ fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
         }
     });
 
-    Ok(all[0].0)
+    if let Some((pair, _)) = all.get(0) {
+        Some(*pair)
+    } else {
+        None
+    }
 }
 
 fn pair_compress(mut tokens: Vec<u32>, pair_to_token_map: &HashMap<(u32, u32), u32>) -> Vec<u32> {
@@ -118,7 +122,9 @@ impl BytePairTokenizer {
         }
 
         while curr_vocab_size < vocab_size {
-            let pair = get_most_common_pair(&tokens)?;
+            let Some(pair) = get_most_common_pair(&tokens) else {
+                break;
+            };
             let new_token_id = curr_vocab_size as u32;
             curr_vocab_size += 1;
             pair_to_token_map.insert(pair, new_token_id);
@@ -210,7 +216,9 @@ impl CharPairTokenizer {
         }
 
         while curr_vocab_size < vocab_size {
-            let pair = get_most_common_pair(&tokens)?;
+            let Some(pair) = get_most_common_pair(&tokens) else {
+                break;
+            };
             let new_token_id = curr_vocab_size as u32;
             curr_vocab_size += 1;
             pair_to_token_map.insert(pair, new_token_id);
