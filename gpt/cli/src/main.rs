@@ -66,8 +66,7 @@ fn main() -> Result<()> {
     let mut training_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     if args.epochs > 0 || safetensors_tokenizer.is_none() {
-        let (tokenizer, training_data) =
-            generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
+        let (tokenizer, training_data) = args.create_tokenizer_and_training_data(&device)?;
         if args.epochs > 0 {
             training_info = Some((args.epochs, training_data));
         }
@@ -232,15 +231,6 @@ fn add_extension_if_missing(filename: &String, extension: &str) -> String {
 pub enum TrainingSet {
     Train,
     Val,
-}
-
-fn generate_training_data(
-    training_corpus: String,
-    device: &candle_core::Device,
-) -> Result<(Box<dyn Tokenizer>, Tensor)> {
-    let tokenizer = CharTokenizer::from_string(&training_corpus)?;
-    let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
-    Ok((Box::new(tokenizer), data))
 }
 
 pub struct Trainer {
