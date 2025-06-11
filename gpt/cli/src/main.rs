@@ -12,16 +12,15 @@ use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
-use gpt_core::{char_tokenizer::CharTokenizer, util::load_data_from_safetensors};
 use gpt_core::{
     language_model::LanguageModel,
     util::{count_params, print_gradient_info},
 };
 use gpt_core::{
     language_model::{LanguageGenerator, language_loss},
-    tokenizer::TOKENIZER_VOCABULARY_KEY,
     tokenizer::Tokenizer,
 };
+use gpt_core::{tokenizer::TokenizerType, util::load_data_from_safetensors};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -54,8 +53,8 @@ fn main() -> Result<()> {
         // an UNSAFE block...
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
-        if let Ok(tokenizer_tensor) = data.load(TOKENIZER_VOCABULARY_KEY, &device) {
-            safetensors_tokenizer = Some(Box::new(CharTokenizer::from_tensor(&tokenizer_tensor)?));
+        if let Ok(char_tokenizer) = TokenizerType::Char.load(&data, &device) {
+            safetensors_tokenizer = Some(char_tokenizer);
         }
         Some(data)
     } else {
@@ -182,6 +181,7 @@ fn main() -> Result<()> {
         let save = normalize_safetensors_filename(save);
         println!("Saving weights to {save}.");
         let tensor = tokenizer.as_tensor(&device)?;
+        let key = tokenizer.tokenizer_type().safetensors_key();
         // We need to get the key, which creates it, before we can actually
         // set it (this feels very weird).
         //
@@ -191,12 +191,12 @@ fn main() -> Result<()> {
         // we perform inference anyways so it's not that big a deal.
         varmap.get(
             tensor.shape(),
-            TOKENIZER_VOCABULARY_KEY,
+            key,
             candle_nn::Init::Const(0.0),
             tensor.dtype(),
             &device,
         )?;
-        varmap.set_one(TOKENIZER_VOCABULARY_KEY, tensor)?;
+        varmap.set_one(key, tensor)?;
         varmap.save(save)?;
     }
 

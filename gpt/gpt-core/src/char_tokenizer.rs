@@ -114,6 +114,10 @@ impl Tokenizer for CharTokenizer {
         Ok(Tensor::from_vec(vec, (len,), device)?)
     }
 
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        crate::tokenizer::TokenizerType::Char
+    }
+
     fn debug_vocab(&self) -> String {
         let str: String = self.clone().into_char_vec().iter().collect();
         format!("{:?}", str)

@@ -15,7 +15,7 @@ pub enum Model {
 }
 
 #[derive(Debug, Clone, ValueEnum)]
-pub enum TokenizerType {
+pub enum ArgsTokenizerType {
     Char,
     CharPairAlpha,
 }
@@ -64,8 +64,8 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
 
-    #[arg(long, value_enum, default_value_t = TokenizerType::Char)]
-    pub tokenizer: TokenizerType,
+    #[arg(long, value_enum, default_value_t = ArgsTokenizerType::Char)]
+    pub tokenizer: ArgsTokenizerType,
 
     /// Size of tokenizer vocabulary (not used by char tokenizer).
     #[arg(long, default_value_t = 300)]
@@ -124,8 +124,8 @@ impl Args {
         let training_corpus = std::fs::read_to_string(&self.corpus)?;
         let original_len = training_corpus.len();
         let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
-            TokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
-            TokenizerType::CharPairAlpha => {
+            ArgsTokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
+            ArgsTokenizerType::CharPairAlpha => {
                 let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
                 Box::new(CharPairTokenizer::new(
                     &training_corpus,

@@ -196,6 +196,10 @@ impl Tokenizer for BytePairTokenizer {
         todo!()
     }
 
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        todo!()
+    }
+
     fn debug_vocab(&self) -> String {
         todo!()
     }
@@ -306,6 +310,10 @@ impl Tokenizer for CharPairTokenizer {
 
     fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
         todo!()
+    }
+
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        crate::tokenizer::TokenizerType::CharPair
     }
 
     fn debug_vocab(&self) -> String {
