@@ -4,6 +4,7 @@ use gpt_core::{
     char_tokenizer::{CHAR_TOKENIZER_VOCABULARY_KEY, CharTokenizer},
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
+    tokenizer::Tokenizer,
     transformer_language_model::TransformerLanguageModelOptions,
     util::load_data_from_safetensors,
 };
@@ -82,7 +83,7 @@ impl WasmLanguageModel {
             .build_no_grad(&self.varmap, &device)
             .map_err(e)?;
 
-        let context = self.tokenizer.encode_safe(initial_context);
+        let context = self.tokenizer.encode_lossy(initial_context);
         let block_size = model.block_size();
         let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
         Ok(WasmLanguageGenerator::create(

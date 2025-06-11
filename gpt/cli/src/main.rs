@@ -15,6 +15,7 @@ use clap::Parser;
 use gpt_core::{
     char_tokenizer::CHAR_TOKENIZER_VOCABULARY_KEY,
     language_model::{LanguageGenerator, language_loss},
+    tokenizer::Tokenizer,
 };
 use gpt_core::{char_tokenizer::CharTokenizer, util::load_data_from_safetensors};
 use gpt_core::{

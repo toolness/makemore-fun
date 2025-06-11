@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
 
-use crate::char_tokenizer::CharTokenizer;
+use crate::{char_tokenizer::CharTokenizer, tokenizer::Tokenizer};
 
 pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     let mut new_tokens = Vec::with_capacity(tokens.len());

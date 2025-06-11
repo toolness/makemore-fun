@@ -6,6 +6,8 @@ use std::{
 use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 
+use crate::tokenizer::Tokenizer;
+
 /// Key in safetensors file to store tokenizer vocabulary.
 /// Prefixing it with "BUFFER." because this is similar to a pytorch
 /// buffer and we want to make it obvious that it's not a trainable
@@ -71,11 +73,20 @@ impl CharTokenizer {
         Ok(Tensor::from_vec(vec, (len,), device)?)
     }
 
-    pub fn len(&self) -> usize {
+    pub fn decode_char(&self, token: u32) -> Result<char> {
+        let Some(&char) = self.itoc.get(&token) else {
+            return Err(anyhow!("'{}' is not a valid token", token));
+        };
+        Ok(char)
+    }
+}
+
+impl Tokenizer for CharTokenizer {
+    fn len(&self) -> usize {
         self.ctoi.len()
     }
 
-    pub fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<u32>> {
+    fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<u32>> {
         let mut result = Vec::with_capacity(content.as_ref().len());
 
         for char in content.as_ref().chars() {
@@ -88,9 +99,7 @@ impl CharTokenizer {
         Ok(result)
     }
 
-    /// Like `encode` but filters out any content that doesn't map to a
-    /// token in the vocabulary.
-    pub fn encode_safe<T: AsRef<str>>(&self, content: T) -> Vec<u32> {
+    fn encode_lossy<T: AsRef<str>>(&self, content: T) -> Vec<u32> {
         let mut result = Vec::with_capacity(content.as_ref().len());
 
         for char in content.as_ref().chars() {
@@ -102,14 +111,7 @@ impl CharTokenizer {
         result
     }
 
-    pub fn decode_char(&self, token: u32) -> Result<char> {
-        let Some(&char) = self.itoc.get(&token) else {
-            return Err(anyhow!("'{}' is not a valid token", token));
-        };
-        Ok(char)
-    }
-
-    pub fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result = String::with_capacity(tokens.len());
 
         for &token in tokens.iter() {
