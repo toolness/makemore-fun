@@ -213,14 +213,24 @@ impl CharPairTokenizer {
             initial_vocab,
         })
     }
+}
 
-    pub fn encode<T: AsRef<str>>(&self, string: T) -> Result<Vec<u32>> {
-        // This is pretty inefficient and can probably be improved a lot.
-        let tokens = self.initial_vocab.encode(string.as_ref())?;
+impl Tokenizer for CharPairTokenizer {
+    fn len(&self) -> usize {
+        self.token_to_chars_map.len()
+    }
+
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        let tokens = self.initial_vocab.encode(content)?;
         Ok(pair_compress(tokens, &self.pair_to_token_map))
     }
 
-    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let tokens = self.initial_vocab.encode_lossy(content);
+        pair_compress(tokens, &self.pair_to_token_map)
+    }
+
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result: Vec<char> = Vec::with_capacity(tokens.len());
         for token in tokens {
             let Some(chars) = self.token_to_chars_map.get(token) else {
@@ -230,6 +240,10 @@ impl CharPairTokenizer {
         }
         Ok(result.into_iter().collect())
     }
+
+    fn into_tensor(self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
@@ -237,6 +251,7 @@ mod tests {
     use crate::{
         char_tokenizer::CharTokenizer,
         pair_tokenizers::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge},
+        tokenizer::Tokenizer,
     };
 
     #[test]
@@ -281,6 +296,6 @@ mod tests {
         let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
         let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
-        assert_eq!(cptok.decode(&[0, 3, 3]).unwrap(), "alolo".to_owned());
+        assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
     }
 }
