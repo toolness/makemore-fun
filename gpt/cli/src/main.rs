@@ -20,7 +20,7 @@ use gpt_core::{
     language_model::{LanguageGenerator, language_loss},
     tokenizer::Tokenizer,
 };
-use gpt_core::{tokenizer::TokenizerType, util::load_data_from_safetensors};
+use gpt_core::{safetensors_loader::load_data_from_safetensors, tokenizer::TokenizerType};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 

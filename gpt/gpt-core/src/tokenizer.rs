@@ -2,7 +2,8 @@ use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 
 use crate::{
-    char_tokenizer::CharTokenizer, pair_tokenizers::CharPairTokenizer, util::SafetensorLoader,
+    char_tokenizer::CharTokenizer, pair_tokenizers::CharPairTokenizer,
+    safetensors_loader::SafetensorsLoader,
 };
 
 /// This enum represents the different kinds of Tokenizers that can be
@@ -30,7 +31,7 @@ impl TokenizerType {
 
     /// Loads the tokenizer from its serialized form in the given safetensors
     /// object.
-    pub fn load<T: SafetensorLoader>(
+    pub fn load<T: SafetensorsLoader>(
         &self,
         safetensors: &T,
         device: &Device,
@@ -48,7 +49,7 @@ impl TokenizerType {
     }
 
     /// Attempts to find any serialized Tokenizer in the given safetensors object.
-    pub fn load_any<T: SafetensorLoader>(
+    pub fn load_any<T: SafetensorsLoader>(
         safetensors: &T,
         device: &Device,
     ) -> Result<Box<dyn Tokenizer>> {

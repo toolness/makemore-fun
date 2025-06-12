@@ -5,9 +5,9 @@ use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
+    safetensors_loader::load_data_from_safetensors,
     tokenizer::{Tokenizer, TokenizerType},
     transformer_language_model::TransformerLanguageModelOptions,
-    util::load_data_from_safetensors,
 };
 use rand::{SeedableRng, rngs::StdRng};
 use wasm_bindgen::prelude::*;
