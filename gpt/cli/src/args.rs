@@ -10,13 +10,22 @@ use gpt_core::transformer_language_model::TransformerLanguageModelOptions;
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
+    /// A simple bigram model, similar to a Markov chain.
     Bigram,
+
+    /// A transformer model, similar to the one documented in the
+    /// "Attention is all you need" paper.
     Transformer,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum ArgsTokenizerType {
+    /// Each character from the training corpus is a separate token.
     Char,
+
+    /// Each character from the training corpus is a separate token, but
+    /// we also mint frequent occurrences of consecutive alphabetic characters
+    /// as new tokens.
     CharPairAlpha,
 }
 
@@ -58,12 +67,16 @@ pub struct Args {
     #[arg(long)]
     pub load: Option<String>,
 
+    /// The device to run training and inference on.
     #[arg(long, value_enum, default_value_t = Device::Cpu)]
     pub device: Device,
 
+    /// The neural net model architecture to use for training/inference.
     #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
 
+    /// The tokenizer to use for encoding/decoding content that is
+    /// fed into/retrieved from the model.
     #[arg(long, value_enum, default_value_t = ArgsTokenizerType::Char)]
     pub tokenizer: ArgsTokenizerType,
 
