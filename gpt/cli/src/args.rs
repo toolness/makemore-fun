@@ -1,12 +1,23 @@
 use crate::device::Device;
+use anyhow::Result;
+use candle_core::Tensor;
 use clap::{Parser, ValueEnum};
+use gpt_core::char_tokenizer::CharTokenizer;
 use gpt_core::language_model_builder::LanguageModelBuilder;
+use gpt_core::pair_tokenizers::{CharPairFilter, CharPairTokenizer};
+use gpt_core::tokenizer::Tokenizer;
 use gpt_core::transformer_language_model::TransformerLanguageModelOptions;
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
     Bigram,
     Transformer,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum ArgsTokenizerType {
+    Char,
+    CharPairAlpha,
 }
 
 #[derive(Parser)]
@@ -53,6 +64,13 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = Model::Transformer)]
     pub model: Model,
 
+    #[arg(long, value_enum, default_value_t = ArgsTokenizerType::Char)]
+    pub tokenizer: ArgsTokenizerType,
+
+    /// Size of tokenizer vocabulary (not used by char tokenizer).
+    #[arg(long, default_value_t = 300)]
+    pub vocab_size: usize,
+
     /// Number of training examples per batch.
     #[arg(long, default_value_t = 32)]
     pub batch_size: usize,
@@ -97,5 +115,33 @@ impl Args {
                 })
             }
         }
+    }
+
+    pub fn create_tokenizer_and_training_data(
+        &self,
+        device: &candle_core::Device,
+    ) -> Result<(Box<dyn Tokenizer>, Tensor)> {
+        let training_corpus = std::fs::read_to_string(&self.corpus)?;
+        let original_len = training_corpus.len();
+        let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
+            ArgsTokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
+            ArgsTokenizerType::CharPairAlpha => {
+                let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
+                Box::new(CharPairTokenizer::new(
+                    &training_corpus,
+                    initial_vocab,
+                    self.vocab_size,
+                    Some(CharPairFilter::AlphaOnly),
+                )?)
+            }
+        };
+        let tokens = tokenizer.encode(&training_corpus)?;
+        let tokens_len = tokens.len();
+        let data = Tensor::new(tokens, device)?;
+        println!(
+            "Tokenizer training data compression ratio: {:.2}",
+            original_len as f32 / tokens_len as f32
+        );
+        Ok((tokenizer, data))
     }
 }

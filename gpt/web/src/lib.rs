@@ -1,9 +1,11 @@
+use std::rc::Rc;
+
 use candle_core::{DType, Device};
 use candle_nn::{VarBuilder, VarMap};
 use gpt_core::{
-    char_tokenizer::{CHAR_TOKENIZER_VOCABULARY_KEY, CharTokenizer},
     language_model::LanguageGenerator,
     language_model_builder::LanguageModelBuilder,
+    tokenizer::{Tokenizer, TokenizerType},
     transformer_language_model::TransformerLanguageModelOptions,
     util::load_data_from_safetensors,
 };
@@ -14,7 +16,7 @@ use wasm_bindgen::prelude::*;
 pub struct WasmLanguageModel {
     varmap: VarMap,
     builder: LanguageModelBuilder,
-    tokenizer: CharTokenizer,
+    tokenizer: Rc<Box<dyn Tokenizer>>,
 }
 
 #[wasm_bindgen]
@@ -55,8 +57,7 @@ impl WasmLanguageModel {
         let safetensors = candle_core::safetensors::SliceSafetensors::new(safetensors_u8.into())?;
         let mut varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-        let tokenizer_tensor = safetensors.load(CHAR_TOKENIZER_VOCABULARY_KEY, &device)?;
-        let tokenizer = CharTokenizer::from_tensor(&tokenizer_tensor).map_err(e)?;
+        let tokenizer = Rc::new(TokenizerType::Char.load(&safetensors, &device).map_err(e)?);
         let builder = factory(tokenizer.len());
 
         builder.build(vb).map_err(e)?;
@@ -82,7 +83,7 @@ impl WasmLanguageModel {
             .build_no_grad(&self.varmap, &device)
             .map_err(e)?;
 
-        let context = self.tokenizer.encode_safe(initial_context);
+        let context = self.tokenizer.encode_lossy(initial_context);
         let block_size = model.block_size();
         let generator = LanguageGenerator::new(&context, model, block_size).map_err(e)?;
         Ok(WasmLanguageGenerator::create(
@@ -97,13 +98,13 @@ impl WasmLanguageModel {
 pub struct WasmLanguageGenerator {
     rng: StdRng,
     generator: LanguageGenerator,
-    tokenizer: CharTokenizer,
+    tokenizer: Rc<Box<dyn Tokenizer>>,
     device: Device,
 }
 
 #[wasm_bindgen]
 impl WasmLanguageGenerator {
-    fn create(seed: u64, generator: LanguageGenerator, tokenizer: CharTokenizer) -> Self {
+    fn create(seed: u64, generator: LanguageGenerator, tokenizer: Rc<Box<dyn Tokenizer>>) -> Self {
         Self {
             rng: StdRng::seed_from_u64(seed),
             generator,
@@ -113,9 +114,9 @@ impl WasmLanguageGenerator {
     }
 
     #[wasm_bindgen]
-    pub fn next_token(&mut self, temperature: f32) -> Result<char, JsError> {
+    pub fn next_token(&mut self, temperature: f32) -> Result<String, JsError> {
         self.generator
-            .next_char(&mut self.rng, &self.tokenizer, temperature, &self.device)
+            .next_token(&mut self.rng, &self.tokenizer, temperature, &self.device)
             .map_err(e)
     }
 }

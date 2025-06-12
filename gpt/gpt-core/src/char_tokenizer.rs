@@ -6,13 +6,7 @@ use std::{
 use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 
-/// Key in safetensors file to store tokenizer vocabulary.
-/// Prefixing it with "BUFFER." because this is similar to a pytorch
-/// buffer and we want to make it obvious that it's not a trainable
-/// model parameter.
-///
-/// The key's value is meant to be a Tensor returned by `Tokenizer::into_tensor()`.
-pub const CHAR_TOKENIZER_VOCABULARY_KEY: &'static str = "BUFFER.tokenizer_vocabulary";
+use crate::tokenizer::Tokenizer;
 
 /// Character-level tokenizer in the style of Karpathy's
 /// neural net lectures.
@@ -59,26 +53,23 @@ impl CharTokenizer {
         Ok(CharTokenizer::from_char_vec(chars?)?)
     }
 
-    /// Returns a one-dimensional tensor with each character in the vocabulary
-    /// represented by a unicode scalar.
-    pub fn into_tensor(self, device: &Device) -> Result<Tensor> {
-        let len = self.ctoi.len();
-        let vec = self
-            .into_char_vec()
-            .into_iter()
-            .map(|char| char as u32)
-            .collect();
-        Ok(Tensor::from_vec(vec, (len,), device)?)
+    pub fn decode_char(&self, token: u32) -> Result<char> {
+        let Some(&char) = self.itoc.get(&token) else {
+            return Err(anyhow!("'{}' is not a valid token", token));
+        };
+        Ok(char)
     }
+}
 
-    pub fn len(&self) -> usize {
+impl Tokenizer for CharTokenizer {
+    fn len(&self) -> usize {
         self.ctoi.len()
     }
 
-    pub fn encode<T: AsRef<str>>(&self, content: T) -> Result<Vec<u32>> {
-        let mut result = Vec::with_capacity(content.as_ref().len());
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        let mut result = Vec::with_capacity(content.len());
 
-        for char in content.as_ref().chars() {
+        for char in content.chars() {
             let Some(token) = self.ctoi.get(&char) else {
                 return Err(anyhow!("'{}' is not a valid character", char));
             };
@@ -88,12 +79,10 @@ impl CharTokenizer {
         Ok(result)
     }
 
-    /// Like `encode` but filters out any content that doesn't map to a
-    /// token in the vocabulary.
-    pub fn encode_safe<T: AsRef<str>>(&self, content: T) -> Vec<u32> {
-        let mut result = Vec::with_capacity(content.as_ref().len());
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let mut result = Vec::with_capacity(content.len());
 
-        for char in content.as_ref().chars() {
+        for char in content.chars() {
             if let Some(&token) = self.ctoi.get(&char) {
                 result.push(token);
             };
@@ -102,14 +91,7 @@ impl CharTokenizer {
         result
     }
 
-    pub fn decode_char(&self, token: u32) -> Result<char> {
-        let Some(&char) = self.itoc.get(&token) else {
-            return Err(anyhow!("'{}' is not a valid token", token));
-        };
-        Ok(char)
-    }
-
-    pub fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result = String::with_capacity(tokens.len());
 
         for &token in tokens.iter() {
@@ -117,6 +99,28 @@ impl CharTokenizer {
         }
 
         Ok(result)
+    }
+
+    /// Returns a one-dimensional tensor with each character in the vocabulary
+    /// represented by a unicode scalar.
+    fn as_tensor(&self, device: &Device) -> Result<Tensor> {
+        let len = self.ctoi.len();
+        let vec = self
+            .clone()
+            .into_char_vec()
+            .into_iter()
+            .map(|char| char as u32)
+            .collect();
+        Ok(Tensor::from_vec(vec, (len,), device)?)
+    }
+
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        crate::tokenizer::TokenizerType::Char
+    }
+
+    fn debug_vocab(&self) -> String {
+        let str: String = self.clone().into_char_vec().iter().collect();
+        format!("{:?}", str)
     }
 }
 
@@ -254,9 +258,15 @@ mod tests {
     fn test_from_into_tensor_works() {
         let input = String::from("abc");
         let tokenizer = CharTokenizer::from_string(&input).unwrap();
-        let tensor = tokenizer.into_tensor(&Device::Cpu).unwrap();
+        let tensor = tokenizer.as_tensor(&Device::Cpu).unwrap();
         assert_eq!(tensor.to_vec1::<u32>().unwrap(), vec![97, 98, 99]);
         let tokenizer = CharTokenizer::from_tensor(&tensor).unwrap();
         assert_eq!(tokenizer.into_char_vec(), vec!['a', 'b', 'c']);
+    }
+
+    #[test]
+    fn test_trait_object_works() {
+        let _trait_obj: Box<dyn Tokenizer> =
+            Box::new(CharTokenizer::from_string(&"hi".to_owned()).unwrap());
     }
 }

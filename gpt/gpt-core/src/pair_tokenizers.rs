@@ -1,8 +1,11 @@
 use std::{cmp::Ordering, collections::HashMap, iter::zip};
 
 use anyhow::{Result, anyhow};
+use candle_core::Tensor;
+use rmp_serde::{Serializer, from_slice};
+use serde::{Deserialize, Serialize};
 
-use crate::char_tokenizer::CharTokenizer;
+use crate::{char_tokenizer::CharTokenizer, tokenizer::Tokenizer};
 
 pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     let mut new_tokens = Vec::with_capacity(tokens.len());
@@ -27,12 +30,26 @@ pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     new_tokens
 }
 
-fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
+fn allow_all(_token: u32) -> bool {
+    true
+}
+
+fn get_most_common_pair(tokens: &[u32]) -> Option<(u32, u32)> {
+    get_most_common_pair_with_filter(tokens, allow_all)
+}
+
+fn get_most_common_pair_with_filter<F: Fn(u32) -> bool>(
+    tokens: &[u32],
+    filter: F,
+) -> Option<(u32, u32)> {
     let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
     if tokens.len() < 2 {
-        return Err(anyhow!("tokens does not contain any pairs!"));
+        return None;
     }
     for (&a, &b) in zip(tokens.iter(), tokens[1..].iter()) {
+        if !filter(a) || !filter(b) {
+            continue;
+        }
         let pair = (a, b);
         let entry = counts.entry(pair).or_insert(0);
         *entry += 1;
@@ -54,7 +71,11 @@ fn get_most_common_pair(tokens: &[u32]) -> Result<(u32, u32)> {
         }
     });
 
-    Ok(all[0].0)
+    if let Some((pair, _)) = all.get(0) {
+        Some(*pair)
+    } else {
+        None
+    }
 }
 
 fn pair_compress(mut tokens: Vec<u32>, pair_to_token_map: &HashMap<(u32, u32), u32>) -> Vec<u32> {
@@ -118,7 +139,9 @@ impl BytePairTokenizer {
         }
 
         while curr_vocab_size < vocab_size {
-            let pair = get_most_common_pair(&tokens)?;
+            let Some(pair) = get_most_common_pair(&tokens) else {
+                break;
+            };
             let new_token_id = curr_vocab_size as u32;
             curr_vocab_size += 1;
             pair_to_token_map.insert(pair, new_token_id);
@@ -139,10 +162,20 @@ impl BytePairTokenizer {
             token_to_bytes_map,
         })
     }
+}
 
-    pub fn encode<T: AsRef<str>>(&self, string: T) -> Vec<u32> {
-        let tokens = string
-            .as_ref()
+impl Tokenizer for BytePairTokenizer {
+    fn len(&self) -> usize {
+        self.token_to_bytes_map.len()
+    }
+
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        Ok(self.encode_lossy(content))
+    }
+
+    /// Note that this isn't actually lossy.
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let tokens = content
             .as_bytes()
             .iter()
             .map(|&u8| u8 as u32)
@@ -151,7 +184,7 @@ impl BytePairTokenizer {
         pair_compress(tokens, &self.pair_to_token_map)
     }
 
-    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result: Vec<u8> = Vec::with_capacity(tokens.len());
         for token in tokens {
             let Some(bytes) = self.token_to_bytes_map.get(token) else {
@@ -160,6 +193,44 @@ impl BytePairTokenizer {
             result.extend(bytes);
         }
         Ok(String::from_utf8(result)?)
+    }
+
+    // I mainly just implemented this to put Karpathy's lecture in practice,
+    // but right now I don't have a use for it, so I'm leaving these methods
+    // unimplemented...
+
+    fn as_tensor(&self, _device: &candle_core::Device) -> Result<candle_core::Tensor> {
+        todo!()
+    }
+
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        todo!()
+    }
+
+    fn debug_vocab(&self) -> String {
+        todo!()
+    }
+}
+
+pub enum CharPairFilter {
+    /// Only merge alphabetic characters into pairs.
+    AlphaOnly,
+}
+
+#[derive(Deserialize, Serialize)]
+struct SerializedCharPairTokenizer {
+    pair_to_token_map: HashMap<(u32, u32), u32>,
+    token_to_chars_map: HashMap<u32, Vec<char>>,
+    initial_vocab: Vec<char>,
+}
+
+impl SerializedCharPairTokenizer {
+    fn into_tokenizer(self) -> Result<CharPairTokenizer> {
+        Ok(CharPairTokenizer {
+            pair_to_token_map: self.pair_to_token_map,
+            token_to_chars_map: self.token_to_chars_map,
+            initial_vocab: CharTokenizer::from_char_vec(self.initial_vocab)?,
+        })
     }
 }
 
@@ -174,25 +245,45 @@ impl CharPairTokenizer {
         corpus: T,
         initial_vocab: CharTokenizer,
         vocab_size: usize,
+        filter: Option<CharPairFilter>,
     ) -> Result<Self> {
-        if vocab_size < initial_vocab.len() {
+        let initial_vocab_size = initial_vocab.len();
+
+        if vocab_size < initial_vocab_size {
             return Err(anyhow!(
                 "vocab_size must be at least the size of initial_vocab!"
             ));
         }
 
-        let mut tokens = initial_vocab.encode(corpus)?;
+        let mut tokens = initial_vocab.encode(corpus.as_ref())?;
 
-        let mut curr_vocab_size = initial_vocab.len();
+        let mut curr_vocab_size = initial_vocab_size;
         let mut pair_to_token_map = HashMap::new();
         let mut token_to_chars_map = HashMap::new();
 
-        for i in 0..initial_vocab.len() {
+        for i in 0..initial_vocab_size {
             token_to_chars_map.insert(i as u32, vec![initial_vocab.decode_char(i as u32)?]);
         }
 
         while curr_vocab_size < vocab_size {
-            let pair = get_most_common_pair(&tokens)?;
+            let Some(pair) = (match filter {
+                None => get_most_common_pair(&tokens),
+                Some(CharPairFilter::AlphaOnly) => {
+                    get_most_common_pair_with_filter(&tokens, |token| {
+                        if token < initial_vocab_size as u32 {
+                            let char = initial_vocab.decode_char(token).unwrap();
+                            match char {
+                                'A'..'Z' | 'a'..'z' => true,
+                                _ => false,
+                            }
+                        } else {
+                            true
+                        }
+                    })
+                }
+            }) else {
+                break;
+            };
             let new_token_id = curr_vocab_size as u32;
             curr_vocab_size += 1;
             pair_to_token_map.insert(pair, new_token_id);
@@ -214,13 +305,37 @@ impl CharPairTokenizer {
         })
     }
 
-    pub fn encode<T: AsRef<str>>(&self, string: T) -> Result<Vec<u32>> {
-        // This is pretty inefficient and can probably be improved a lot.
-        let tokens = self.initial_vocab.encode(string)?;
+    fn serialize(&self) -> SerializedCharPairTokenizer {
+        SerializedCharPairTokenizer {
+            pair_to_token_map: self.pair_to_token_map.clone(),
+            token_to_chars_map: self.token_to_chars_map.clone(),
+            initial_vocab: self.initial_vocab.clone().into_char_vec(),
+        }
+    }
+
+    pub fn from_tensor(tensor: &Tensor) -> Result<Self> {
+        let vec: Vec<u8> = tensor.to_vec1()?;
+        let ser: SerializedCharPairTokenizer = from_slice(&vec)?;
+        Ok(ser.into_tokenizer()?)
+    }
+}
+
+impl Tokenizer for CharPairTokenizer {
+    fn len(&self) -> usize {
+        self.token_to_chars_map.len()
+    }
+
+    fn encode(&self, content: &str) -> Result<Vec<u32>> {
+        let tokens = self.initial_vocab.encode(content)?;
         Ok(pair_compress(tokens, &self.pair_to_token_map))
     }
 
-    pub fn decode(&self, tokens: &[u32]) -> Result<String> {
+    fn encode_lossy(&self, content: &str) -> Vec<u32> {
+        let tokens = self.initial_vocab.encode_lossy(content);
+        pair_compress(tokens, &self.pair_to_token_map)
+    }
+
+    fn decode(&self, tokens: &Vec<u32>) -> Result<String> {
         let mut result: Vec<char> = Vec::with_capacity(tokens.len());
         for token in tokens {
             let Some(chars) = self.token_to_chars_map.get(token) else {
@@ -230,13 +345,41 @@ impl CharPairTokenizer {
         }
         Ok(result.into_iter().collect())
     }
+
+    fn as_tensor(&self, device: &candle_core::Device) -> Result<candle_core::Tensor> {
+        let mut buf = Vec::new();
+        self.serialize().serialize(&mut Serializer::new(&mut buf))?;
+        let len = buf.len();
+        Ok(Tensor::from_vec(buf, (len,), device)?)
+    }
+
+    fn tokenizer_type(&self) -> crate::tokenizer::TokenizerType {
+        crate::tokenizer::TokenizerType::CharPair
+    }
+
+    fn debug_vocab(&self) -> String {
+        let mut result: Vec<String> = Vec::with_capacity(self.token_to_chars_map.len());
+        for token in 0..self.token_to_chars_map.len() {
+            let str: String = self
+                .token_to_chars_map
+                .get(&(token as u32))
+                .unwrap()
+                .iter()
+                .collect();
+            result.push(str);
+        }
+        format!("{:?}", result)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
         char_tokenizer::CharTokenizer,
-        pair_tokenizers::{BytePairTokenizer, CharPairTokenizer, get_most_common_pair, merge},
+        pair_tokenizers::{
+            BytePairTokenizer, CharPairFilter, CharPairTokenizer, get_most_common_pair, merge,
+        },
+        tokenizer::Tokenizer,
     };
 
     #[test]
@@ -263,9 +406,9 @@ mod tests {
     #[test]
     fn test_byte_pair_tokenizer() {
         let tokenizer = BytePairTokenizer::new("abcFOOdeFOO", 258).unwrap();
-        assert_eq!(tokenizer.encode("a"), vec![97]);
+        assert_eq!(tokenizer.encode("a").unwrap(), vec![97]);
         assert_eq!(
-            tokenizer.encode("abcFOOdeFOOfFO"),
+            tokenizer.encode("abcFOOdeFOOfFO").unwrap(),
             vec![97, 98, 99, 257, 100, 101, 257, 102, 256]
         );
         assert_eq!(
@@ -277,10 +420,34 @@ mod tests {
     }
 
     #[test]
-    fn test_char_pair_tokenizer() {
+    fn test_char_pair_tokenizer_without_filter() {
         let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
-        let cptok = CharPairTokenizer::new("alolo", tok, 4).unwrap();
+        let cptok = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
-        assert_eq!(cptok.decode(&[0, 3, 3]).unwrap(), "alolo".to_owned());
+        assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
+    }
+
+    #[test]
+    fn test_char_pair_tokenizer_serialization() {
+        let ser = {
+            let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
+            let orig = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
+            orig.as_tensor(&candle_core::Device::Cpu).unwrap()
+        };
+        let cptok = CharPairTokenizer::from_tensor(&ser).unwrap();
+        assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
+        assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
+    }
+
+    #[test]
+    fn test_char_pair_tokenizer_with_alpha_filter() {
+        let tok = CharTokenizer::from_string(&String::from("alo!")).unwrap();
+        let cptok =
+            CharPairTokenizer::new("alolo!!!!", tok, 6, Some(CharPairFilter::AlphaOnly)).unwrap();
+        assert_eq!(cptok.encode("alolo!!!!").unwrap(), vec![5, 4, 0, 0, 0, 0]);
+        assert_eq!(
+            cptok.decode(&vec![5, 4, 0, 0, 0, 0]).unwrap(),
+            "alolo!!!!".to_owned()
+        );
     }
 }

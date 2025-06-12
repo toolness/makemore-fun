@@ -13,14 +13,14 @@ use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
 use clap::Parser;
 use gpt_core::{
-    char_tokenizer::CHAR_TOKENIZER_VOCABULARY_KEY,
-    language_model::{LanguageGenerator, language_loss},
-};
-use gpt_core::{char_tokenizer::CharTokenizer, util::load_data_from_safetensors};
-use gpt_core::{
     language_model::LanguageModel,
     util::{count_params, print_gradient_info},
 };
+use gpt_core::{
+    language_model::{LanguageGenerator, language_loss},
+    tokenizer::Tokenizer,
+};
+use gpt_core::{tokenizer::TokenizerType, util::load_data_from_safetensors};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
     let device = args.device.to_candle_device()?;
     println!("Using {} for training/inference.", args.device);
 
-    let mut safetensors_tokenizer: Option<CharTokenizer> = None;
+    let mut safetensors_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     let safetensors = if let Some(load) = &args.load {
         let load = normalize_safetensors_filename(load);
@@ -53,8 +53,8 @@ fn main() -> Result<()> {
         // an UNSAFE block...
         let data = unsafe { candle_core::safetensors::MmapedSafetensors::new(load)? };
 
-        if let Ok(tokenizer_tensor) = data.load(CHAR_TOKENIZER_VOCABULARY_KEY, &device) {
-            safetensors_tokenizer = Some(CharTokenizer::from_tensor(&tokenizer_tensor)?);
+        if let Ok(char_tokenizer) = TokenizerType::load_any(&data, &device) {
+            safetensors_tokenizer = Some(char_tokenizer);
         }
         Some(data)
     } else {
@@ -62,11 +62,14 @@ fn main() -> Result<()> {
     };
 
     let mut training_info: Option<(usize, Tensor)> = None;
-    let mut training_tokenizer: Option<CharTokenizer> = None;
+    let mut training_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
     if args.epochs > 0 || safetensors_tokenizer.is_none() {
-        let (tokenizer, training_data) =
-            generate_training_data(std::fs::read_to_string(&args.corpus)?, &device)?;
+        println!(
+            "Initializing tokenizer {:?} with training data...",
+            args.tokenizer
+        );
+        let (tokenizer, training_data) = args.create_tokenizer_and_training_data(&device)?;
         if args.epochs > 0 {
             training_info = Some((args.epochs, training_data));
         }
@@ -94,6 +97,9 @@ fn main() -> Result<()> {
     let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
     println!("Initialized tokenizer with {} tokens.", vocab_size);
+    if args.vars {
+        println!("Tokenizer vocabulary: {}", tokenizer.debug_vocab());
+    }
 
     // let (xs, ys) = get_batch(&train_data, &mut rng)?;
     // println!("xs:\n{xs}\nys:\n{ys}");
@@ -174,6 +180,8 @@ fn main() -> Result<()> {
     if let Some(save) = &args.save {
         let save = normalize_safetensors_filename(save);
         println!("Saving weights to {save}.");
+        let tensor = tokenizer.as_tensor(&device)?;
+        let key = tokenizer.tokenizer_type().safetensors_key();
         // We need to get the key, which creates it, before we can actually
         // set it (this feels very weird).
         //
@@ -182,16 +190,13 @@ fn main() -> Result<()> {
         // real variable, when it's actually not. But this is right before
         // we perform inference anyways so it's not that big a deal.
         varmap.get(
-            (tokenizer.len(),),
-            CHAR_TOKENIZER_VOCABULARY_KEY,
+            tensor.shape(),
+            key,
             candle_nn::Init::Const(0.0),
-            DType::U32,
+            tensor.dtype(),
             &device,
         )?;
-        varmap.set_one(
-            CHAR_TOKENIZER_VOCABULARY_KEY,
-            tokenizer.clone().into_tensor(&device)?,
-        )?;
+        varmap.set_one(key, tensor)?;
         varmap.save(save)?;
     }
 
@@ -205,7 +210,7 @@ fn main() -> Result<()> {
             LanguageGenerator::new(&context, model_no_grad, args.block_size)?;
         for _ in 0..args.chars {
             let char =
-                language_generator.next_char(&mut rng, &tokenizer, args.temperature, &device)?;
+                language_generator.next_token(&mut rng, &tokenizer, args.temperature, &device)?;
             print!("{}", char);
             std::io::stdout().flush()?;
         }
@@ -234,15 +239,6 @@ fn add_extension_if_missing(filename: &String, extension: &str) -> String {
 pub enum TrainingSet {
     Train,
     Val,
-}
-
-fn generate_training_data(
-    training_corpus: String,
-    device: &candle_core::Device,
-) -> Result<(CharTokenizer, Tensor)> {
-    let tokenizer = CharTokenizer::from_string(&training_corpus)?;
-    let data = Tensor::new(tokenizer.encode(&training_corpus)?, &device)?;
-    Ok((tokenizer, data))
 }
 
 pub struct Trainer {
