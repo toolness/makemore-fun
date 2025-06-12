@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use args::Args;
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
@@ -62,41 +62,31 @@ fn main() -> Result<()> {
     };
 
     let mut training_info: Option<(usize, Tensor)> = None;
-    let mut training_tokenizer: Option<Box<dyn Tokenizer>> = None;
 
-    if args.epochs > 0 || safetensors_tokenizer.is_none() {
+    let tokenizer = if args.epochs > 0 || safetensors_tokenizer.is_none() {
         println!(
             "Initializing tokenizer {:?} with training data...",
             args.tokenizer
         );
-        let (tokenizer, training_data) = args.create_tokenizer_and_training_data(&device)?;
+        let (tokenizer, training_data) =
+            args.create_tokenizer_and_training_data(&device, safetensors_tokenizer)?;
         if args.epochs > 0 {
             training_info = Some((args.epochs, training_data));
         }
-        training_tokenizer = Some(tokenizer);
-    }
-
-    let tokenizer = match (safetensors_tokenizer, training_tokenizer) {
-        (None, None) => {
-            return Err(anyhow!("Unable to load tokenizer!"));
-        }
-        (None, Some(tokenizer)) => tokenizer,
-        (Some(tokenizer), None) => tokenizer,
-        (Some(safetensors_tokenizer), Some(training_tokenizer)) => {
-            if safetensors_tokenizer.len() != training_tokenizer.len() {
-                // Return an error, the model has been trained assuming one vocabulary
-                // size, we can't train it with a different vocabulary size.
-                return Err(anyhow!(
-                    "Mismatch between tokenizer data in safetensors file and training data!"
-                ));
-            }
-            safetensors_tokenizer
-        }
+        tokenizer
+    } else {
+        // If we reach this branch, `safetensors_tokenizer` must have something in it.
+        println!("Using tokenizer from safetensors data.",);
+        safetensors_tokenizer.unwrap()
     };
 
     let context = tokenizer.encode(&args.context)?;
     let vocab_size = tokenizer.len();
-    println!("Initialized tokenizer with {} tokens.", vocab_size);
+    println!(
+        "Initialized tokenizer {:?} with {} tokens.",
+        tokenizer.tokenizer_type(),
+        vocab_size
+    );
     if args.vars {
         println!("Tokenizer vocabulary: {}", tokenizer.debug_vocab());
     }

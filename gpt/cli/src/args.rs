@@ -134,32 +134,39 @@ impl Args {
     pub fn create_tokenizer_and_training_data(
         &self,
         device: &candle_core::Device,
+        existing_tokenizer: Option<Box<dyn Tokenizer>>,
     ) -> Result<(Box<dyn Tokenizer>, Tensor)> {
         let training_corpus = std::fs::read_to_string(&self.corpus)?;
         let original_len = training_corpus.len();
-        let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
-            ArgsTokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
-            ArgsTokenizerType::CharPairAlpha => {
-                let pb = ProgressBar::new(self.vocab_size as u64);
-                pb.set_style(
-                    ProgressStyle::with_template(
-                        "[{elapsed_precise}] {bar:30.white/white} {pos:>7}/{len:7} {msg}",
-                    )
-                    .unwrap(),
-                );
-                pb.set_message("Tokenizing");
-                let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
-                let result = Box::new(CharPairTokenizer::new(
-                    &training_corpus,
-                    initial_vocab,
-                    self.vocab_size,
-                    Some(CharPairFilter::AlphaOnly),
-                    |progress| {
-                        pb.set_position(progress as u64);
-                    },
-                )?);
-                pb.finish();
-                result
+        let tokenizer: Box<dyn Tokenizer> = if let Some(tokenizer) = existing_tokenizer {
+            // We don't want to re-initialize the tokenizer if we were already passed one in, especially
+            // because generating the tokenizer's vocabulary could take a while.
+            tokenizer
+        } else {
+            match self.tokenizer {
+                ArgsTokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
+                ArgsTokenizerType::CharPairAlpha => {
+                    let pb = ProgressBar::new(self.vocab_size as u64);
+                    pb.set_style(
+                        ProgressStyle::with_template(
+                            "[{elapsed_precise}] {bar:30.white/white} {pos:>7}/{len:7} {msg}",
+                        )
+                        .unwrap(),
+                    );
+                    pb.set_message("Creating vocab");
+                    let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
+                    let result = Box::new(CharPairTokenizer::new(
+                        &training_corpus,
+                        initial_vocab,
+                        self.vocab_size,
+                        Some(CharPairFilter::AlphaOnly),
+                        |progress| {
+                            pb.set_position(progress as u64);
+                        },
+                    )?);
+                    pb.finish();
+                    result
+                }
             }
         };
         let tokens = tokenizer.encode(&training_corpus)?;
