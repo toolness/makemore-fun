@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{char_tokenizer::CharTokenizer, tokenizer::Tokenizer};
 
+/// Replaces all occurrences of the given consecutive pair of tokens
+/// with the given token.
 pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     let mut new_tokens = Vec::with_capacity(tokens.len());
     let mut i = 0;
@@ -30,14 +32,16 @@ pub fn merge(tokens: &[u32], pair: (u32, u32), pair_token_id: u32) -> Vec<u32> {
     new_tokens
 }
 
-fn allow_all(_token: u32) -> bool {
-    true
-}
-
+/// Given a list of tokens, attempts to find the most frequently
+/// occurring consecutive pair.
 fn get_most_common_pair(tokens: &[u32]) -> Option<(u32, u32)> {
-    get_most_common_pair_with_filter(tokens, allow_all)
+    get_most_common_pair_with_filter(tokens, |_| true)
 }
 
+/// Given a list of tokens, attempts to find the most frequently
+/// occurring consecutive pair. Tokens that do not match the given
+/// filter function are not considered eligible candidates for
+/// pairs.
 fn get_most_common_pair_with_filter<F: Fn(u32) -> bool>(
     tokens: &[u32],
     filter: F,
@@ -78,6 +82,8 @@ fn get_most_common_pair_with_filter<F: Fn(u32) -> bool>(
     }
 }
 
+/// Given a list of tokens, attempts to compress them using a pairwise encoding
+/// mapping, stopping when there's nothing left to pairwise-encode.
 fn pair_compress(mut tokens: Vec<u32>, pair_to_token_map: &HashMap<(u32, u32), u32>) -> Vec<u32> {
     // This is pretty inefficient and can probably be improved a lot.
     loop {
@@ -217,6 +223,10 @@ pub enum CharPairFilter {
     AlphaOnly,
 }
 
+/// Represents the serialized form of a `CharPairTokenizer`.
+/// Technically we might be able to accomplish this through
+/// customizable serde shenanigans but just making a custom
+/// data structure is easiest for now.
 #[derive(Deserialize, Serialize)]
 struct SerializedCharPairTokenizer {
     pair_to_token_map: HashMap<(u32, u32), u32>,
@@ -234,6 +244,10 @@ impl SerializedCharPairTokenizer {
     }
 }
 
+/// Similar to the byte-pair tokenizer, but bases its character-level tokens
+/// on a `CharTokenizer`, and pairwise-encodies high-frequency consecutive
+/// characters in the training corpus, rather than bytes in a UTF-8
+/// sequence.
 pub struct CharPairTokenizer {
     pair_to_token_map: HashMap<(u32, u32), u32>,
     token_to_chars_map: HashMap<u32, Vec<char>>,
