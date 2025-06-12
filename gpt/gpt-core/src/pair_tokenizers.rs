@@ -255,11 +255,12 @@ pub struct CharPairTokenizer {
 }
 
 impl CharPairTokenizer {
-    pub fn new<T: AsRef<str>>(
+    pub fn new<T: AsRef<str>, F: Fn(usize)>(
         corpus: T,
         initial_vocab: CharTokenizer,
         vocab_size: usize,
         filter: Option<CharPairFilter>,
+        progress_fn: F,
     ) -> Result<Self> {
         let initial_vocab_size = initial_vocab.len();
 
@@ -276,10 +277,12 @@ impl CharPairTokenizer {
         let mut token_to_chars_map = HashMap::new();
 
         for i in 0..initial_vocab_size {
+            progress_fn(i);
             token_to_chars_map.insert(i as u32, vec![initial_vocab.decode_char(i as u32)?]);
         }
 
         while curr_vocab_size < vocab_size {
+            progress_fn(curr_vocab_size);
             let Some(pair) = (match filter {
                 None => get_most_common_pair(&tokens),
                 Some(CharPairFilter::AlphaOnly) => {
@@ -311,6 +314,8 @@ impl CharPairTokenizer {
             token_to_chars_map.insert(new_token_id, new_token_chars);
             tokens = merge(&tokens, pair, new_token_id);
         }
+
+        progress_fn(vocab_size);
 
         Ok(Self {
             pair_to_token_map,
@@ -433,10 +438,12 @@ mod tests {
         )
     }
 
+    fn no_progrees(_progress: usize) {}
+
     #[test]
     fn test_char_pair_tokenizer_without_filter() {
         let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
-        let cptok = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
+        let cptok = CharPairTokenizer::new("alolo", tok, 4, None, no_progrees).unwrap();
         assert_eq!(cptok.encode("alolo").unwrap(), vec![0, 3, 3]);
         assert_eq!(cptok.decode(&vec![0, 3, 3]).unwrap(), "alolo".to_owned());
     }
@@ -445,7 +452,7 @@ mod tests {
     fn test_char_pair_tokenizer_serialization() {
         let ser = {
             let tok = CharTokenizer::from_string(&String::from("alo")).unwrap();
-            let orig = CharPairTokenizer::new("alolo", tok, 4, None).unwrap();
+            let orig = CharPairTokenizer::new("alolo", tok, 4, None, no_progrees).unwrap();
             orig.as_tensor(&candle_core::Device::Cpu).unwrap()
         };
         let cptok = CharPairTokenizer::from_tensor(&ser).unwrap();
@@ -456,8 +463,14 @@ mod tests {
     #[test]
     fn test_char_pair_tokenizer_with_alpha_filter() {
         let tok = CharTokenizer::from_string(&String::from("alo!")).unwrap();
-        let cptok =
-            CharPairTokenizer::new("alolo!!!!", tok, 6, Some(CharPairFilter::AlphaOnly)).unwrap();
+        let cptok = CharPairTokenizer::new(
+            "alolo!!!!",
+            tok,
+            6,
+            Some(CharPairFilter::AlphaOnly),
+            no_progrees,
+        )
+        .unwrap();
         assert_eq!(cptok.encode("alolo!!!!").unwrap(), vec![5, 4, 0, 0, 0, 0]);
         assert_eq!(
             cptok.decode(&vec![5, 4, 0, 0, 0, 0]).unwrap(),

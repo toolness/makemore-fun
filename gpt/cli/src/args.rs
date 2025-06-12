@@ -7,6 +7,7 @@ use gpt_core::language_model_builder::LanguageModelBuilder;
 use gpt_core::pair_tokenizers::{CharPairFilter, CharPairTokenizer};
 use gpt_core::tokenizer::Tokenizer;
 use gpt_core::transformer_language_model::TransformerLanguageModelOptions;
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Model {
@@ -139,13 +140,26 @@ impl Args {
         let tokenizer: Box<dyn Tokenizer> = match self.tokenizer {
             ArgsTokenizerType::Char => Box::new(CharTokenizer::from_string(&training_corpus)?),
             ArgsTokenizerType::CharPairAlpha => {
+                let pb = ProgressBar::new(self.vocab_size as u64);
+                pb.set_style(
+                    ProgressStyle::with_template(
+                        "[{elapsed_precise}] {bar:30.white/white} {pos:>7}/{len:7} {msg}",
+                    )
+                    .unwrap(),
+                );
+                pb.set_message("Tokenizing");
                 let initial_vocab = CharTokenizer::from_string(&training_corpus)?;
-                Box::new(CharPairTokenizer::new(
+                let result = Box::new(CharPairTokenizer::new(
                     &training_corpus,
                     initial_vocab,
                     self.vocab_size,
                     Some(CharPairFilter::AlphaOnly),
-                )?)
+                    |progress| {
+                        pb.set_position(progress as u64);
+                    },
+                )?);
+                pb.finish();
+                result
             }
         };
         let tokens = tokenizer.encode(&training_corpus)?;
