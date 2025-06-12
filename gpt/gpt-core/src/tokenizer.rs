@@ -8,6 +8,7 @@ use crate::{
 
 /// This enum represents the different kinds of Tokenizers that can be
 /// deserialized and provides methods to load them.
+#[derive(Debug)]
 pub enum TokenizerType {
     Char,
     CharPair,
